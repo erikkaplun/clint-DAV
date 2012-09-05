@@ -1,4 +1,4 @@
--- DAV.hs: WebDAV client library
+-- TH.hs: WebDAV client library - bits using TH
 -- Copyright © 2012  Clint Adams
 --
 -- This program is free software: you can redistribute it and/or modify

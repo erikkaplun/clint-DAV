@@ -14,8 +14,6 @@
 -- You should have received a copy of the GNU General Public License
 -- along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-{-# LANGUAGE OverloadedStrings, TemplateHaskell, FlexibleContexts, ConstraintKinds, QuasiQuotes #-}
-
 import qualified Data.ByteString.Char8 as BC8
 
 import Data.Maybe (fromMaybe, fromJust)
