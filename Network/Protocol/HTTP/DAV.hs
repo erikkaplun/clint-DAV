@@ -116,15 +116,17 @@ getAllProps = do
     propresp <- davRequest "PROPFIND" ahs (xmlBody propname)
     return $ (XML.parseLBS_ def . responseBody) propresp
 
-getContent :: MonadResourceBase m => DAVState m BL.ByteString
+getContent :: MonadResourceBase m => DAVState m (Maybe B.ByteString, BL.ByteString)
 getContent = do
     resp <- davRequest "GET" [] emptyBody
-    return $ responseBody resp
+    let ct = lookup (mk "Content-Type") (responseHeaders resp)
+    return $ (ct, responseBody resp)
 
-putContent :: MonadResourceBase m => BL.ByteString -> DAVState m ()
-putContent body = do
+putContent :: MonadResourceBase m => (Maybe B.ByteString, BL.ByteString) -> DAVState m ()
+putContent (ct, body) = do
     d <- get
-    let ahs = fromMaybe [] (fmap (return . (,) (mk "If") . parenthesize) (_lockToken d))
+    let ahs' = fromMaybe [] (fmap (return . (,) (mk "If") . parenthesize) (d ^. lockToken))
+    let ahs = ahs' ++ fromMaybe [] (fmap (return . (,) (mk "Content-Type")) ct)
     _ <- davRequest "PUT" ahs (RequestBodyLBS body)
     return ()
 
@@ -149,7 +151,7 @@ props2patch = XML.renderLBS XML.def . patch . props . fromDocument
 	     [ XML.NodeElement $ XML.Element "D:prop" [] prop ]
 	   ]
 
-getPropsAndContent :: String -> B.ByteString -> B.ByteString -> IO (XML.Document, BL.ByteString)
+getPropsAndContent :: String -> B.ByteString -> B.ByteString -> IO (XML.Document, (Maybe B.ByteString, BL.ByteString))
 getPropsAndContent url username password = withDS url username password $ do
     getOptions
     o <- get
@@ -158,7 +160,7 @@ getPropsAndContent url username password = withDS url username password $ do
         body <- getContent
         return (props, body)) `finally` when (supportsLocking o) (unlockResource)
 
-putContentAndProps :: String -> B.ByteString -> B.ByteString -> (XML.Document, BL.ByteString) -> IO ()
+putContentAndProps :: String -> B.ByteString -> B.ByteString -> (XML.Document, (Maybe B.ByteString, BL.ByteString)) -> IO ()
 putContentAndProps url username password (p, b) = withDS url username password $ do
     getOptions
     o <- get
