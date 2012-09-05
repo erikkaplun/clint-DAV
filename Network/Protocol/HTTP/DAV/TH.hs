@@ -25,6 +25,7 @@ import Network.HTTP.Conduit (Manager, Request)
 data DAVContext a = DAVContext {
     _allowedMethods :: [B.ByteString]
   , _baseRequest :: Request a
+  , _complianceClasses :: [B.ByteString]
   , _httpManager :: Manager
   , _lockToken :: Maybe B.ByteString
   , _basicusername :: B.ByteString

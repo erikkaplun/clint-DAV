@@ -54,7 +54,7 @@ initialDS :: String -> B.ByteString -> B.ByteString -> ManagerSettings -> IO (DA
 initialDS u username password s = do
     mgr <- newManager s
     req <- parseUrl u
-    return $ DAVContext [] req mgr Nothing username password
+    return $ DAVContext [] req [] mgr Nothing username password
 
 closeDS :: DAVContext a -> IO ()
 closeDS = closeManager . _httpManager
@@ -88,6 +88,8 @@ getOptions :: MonadResourceBase m => DAVState m ()
 getOptions = do
     optresp <- davRequest "OPTIONS" [] emptyBody
     let meths = (B.splitWith (==(fromIntegral . fromEnum) ',') . fromMaybe B.empty . lookup "Allow" . responseHeaders) optresp
+    let cclass = (B.splitWith (==(fromIntegral . fromEnum) ',') . fromMaybe B.empty . lookup "DAV" . responseHeaders) optresp
+    modify (complianceClasses .~ cclass)
     modify (allowedMethods .~ meths)
 
 lockResource :: MonadResourceBase m => Bool -> DAVState m ()
