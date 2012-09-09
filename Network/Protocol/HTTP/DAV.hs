@@ -1,6 +1,8 @@
 -- DAV.hs: WebDAV client library
 -- Copyright © 2012  Clint Adams
 --
+-- vim: softtabstop=4:shiftwidth=4:expandtab
+--
 -- This program is free software: you can redistribute it and/or modify
 -- it under the terms of the GNU General Public License as published by
 -- the Free Software Foundation, either version 3 of the License, or
