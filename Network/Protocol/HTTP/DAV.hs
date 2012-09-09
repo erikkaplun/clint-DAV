@@ -146,12 +146,22 @@ putProps props = do
 props2patch :: XML.Document -> BL.ByteString
 props2patch = XML.renderLBS XML.def . patch . props . fromDocument
    where
-       props cursor = map node (cursor $/ element "{DAV:}response" &/ element "{DAV:}propstat" &/ element "{DAV:}prop" &/ checkName (not . flip elem ["{DAV:}creationdate", "{DAV:}displayname", "{DAV:}getcontentlength", "{DAV:}getcontenttype", "{DAV:}getetag", "{DAV:}getlastmodified", "{DAV:}lockdiscovery", "{DAV:}resourcetype", "{DAV:}supportedlock"]))
+       props cursor = map node (cursor $/ element "{DAV:}response" &/ element "{DAV:}propstat" &/ element "{DAV:}prop" &/ checkName (not . flip elem blacklist))
        patch prop = XML.Document (XML.Prologue [] Nothing []) (root prop) []
        root prop = XML.Element "D:propertyupdate" [("xmlns:D", "DAV:")]
            [ XML.NodeElement $ XML.Element "D:set" []
 	     [ XML.NodeElement $ XML.Element "D:prop" [] prop ]
 	   ]
+       blacklist = [ "{DAV:}creationdate"
+                   , "{DAV:}displayname"
+                   , "{DAV:}getcontentlength"
+                   , "{DAV:}getcontenttype"
+                   , "{DAV:}getetag"
+                   , "{DAV:}getlastmodified"
+                   , "{DAV:}lockdiscovery"
+                   , "{DAV:}resourcetype"
+                   , "{DAV:}supportedlock"
+                   ]
 
 getPropsAndContent :: String -> B.ByteString -> B.ByteString -> IO (XML.Document, (Maybe B.ByteString, BL.ByteString))
 getPropsAndContent url username password = withDS url username password $ do
