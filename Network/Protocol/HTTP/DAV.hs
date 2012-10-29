@@ -38,11 +38,12 @@ import Control.Monad.Trans.State.Lazy (evalStateT, StateT, get, modify)
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
+import qualified Data.Map as Map
 
 import Data.Maybe (fromMaybe)
 
 import Network.HTTP.Conduit (httpLbs, parseUrl, applyBasicAuth, Request(..), RequestBody(..), Response(..), newManager, closeManager, ManagerSettings(..), def, HttpException(..))
-import Network.HTTP.Types (headerContentType, Method, RequestHeaders, unauthorized401)
+import Network.HTTP.Types (hContentType, Method, RequestHeaders, unauthorized401)
 
 import qualified Text.XML as XML
 import Text.XML.Cursor (($/), (&/), element, node, fromDocument, checkName)
@@ -96,7 +97,7 @@ getOptions = do
 
 lockResource :: MonadResourceBase m => Bool -> DAVState m ()
 lockResource nocreate = do
-    let ahs' = [headerContentType "application/xml; charset=\"utf-8\"", (mk "Depth", "0"), (mk "Timeout", "Second-300")]
+    let ahs' = [(hContentType, "application/xml; charset=\"utf-8\""), (mk "Depth", "0"), (mk "Timeout", "Second-300")]
     let ahs = if nocreate then (mk "If-Match", "*"):ahs' else ahs'
     lockresp <- davRequest "LOCK" ahs (xmlBody locky)
     let hdrtoken = (lookup "Lock-Token" . responseHeaders) lockresp
@@ -116,21 +117,21 @@ supportsLocking = liftA2 (&&) ("LOCK" `elem`) ("UNLOCK" `elem`) . _allowedMethod
 
 getAllProps :: MonadResourceBase m => DAVState m XML.Document
 getAllProps = do
-    let ahs = [headerContentType "application/xml; charset=\"utf-8\""]
+    let ahs = [(hContentType, "application/xml; charset=\"utf-8\"")]
     propresp <- davRequest "PROPFIND" ahs (xmlBody propname)
     return $ (XML.parseLBS_ def . responseBody) propresp
 
 getContent :: MonadResourceBase m => DAVState m (Maybe B.ByteString, BL.ByteString)
 getContent = do
     resp <- davRequest "GET" [] emptyBody
-    let ct = lookup (mk "Content-Type") (responseHeaders resp)
+    let ct = lookup (hContentType) (responseHeaders resp)
     return $ (ct, responseBody resp)
 
 putContent :: MonadResourceBase m => (Maybe B.ByteString, BL.ByteString) -> DAVState m ()
 putContent (ct, body) = do
     d <- get
     let ahs' = fromMaybe [] (fmap (return . (,) (mk "If") . parenthesize) (d ^. lockToken))
-    let ahs = ahs' ++ fromMaybe [] (fmap (return . (,) (mk "Content-Type")) ct)
+    let ahs = ahs' ++ fromMaybe [] (fmap (return . (,) (hContentType)) ct)
     _ <- davRequest "PUT" ahs (RequestBodyLBS body)
     return ()
 
@@ -140,7 +141,7 @@ parenthesize x = B.concat ["(", x, ")"]
 putProps :: MonadResourceBase m => XML.Document -> DAVState m ()
 putProps props = do
     d <- get
-    let ah' = headerContentType "application/xml; charset=\"utf-8\""
+    let ah' = (hContentType, "application/xml; charset=\"utf-8\"")
     let ahs = ah':fromMaybe [] (fmap (return . (,) (mk "If") . parenthesize) (_lockToken d))
     _ <- davRequest "PROPPATCH" ahs ((RequestBodyLBS . props2patch) props) -- FIXME: should diff and remove props from target
     return ()
@@ -150,9 +151,9 @@ props2patch = XML.renderLBS XML.def . patch . props . fromDocument
    where
        props cursor = map node (cursor $/ element "{DAV:}response" &/ element "{DAV:}propstat" &/ element "{DAV:}prop" &/ checkName (not . flip elem blacklist))
        patch prop = XML.Document (XML.Prologue [] Nothing []) (root prop) []
-       root prop = XML.Element "D:propertyupdate" [("xmlns:D", "DAV:")]
-           [ XML.NodeElement $ XML.Element "D:set" []
-	     [ XML.NodeElement $ XML.Element "D:prop" [] prop ]
+       root prop = XML.Element "D:propertyupdate" (Map.fromList [("xmlns:D", "DAV:")])
+           [ XML.NodeElement $ XML.Element "D:set" Map.empty
+	     [ XML.NodeElement $ XML.Element "D:prop" Map.empty prop ]
 	   ]
        blacklist = [ "{DAV:}creationdate"
                    , "{DAV:}displayname"
@@ -185,14 +186,14 @@ putContentAndProps url username password (p, b) = withDS url username password $
 propname :: XML.Document
 propname = XML.Document (XML.Prologue [] Nothing []) root []
     where
-        root = XML.Element "D:propfind" [("xmlns:D", "DAV:")] [xml|
+        root = XML.Element "D:propfind" (Map.fromList [("xmlns:D", "DAV:")]) [xml|
 <D:allprop>
 |]
 
 locky :: XML.Document
 locky = XML.Document (XML.Prologue [] Nothing []) root []
     where
-        root = XML.Element "D:lockinfo" [("xmlns:D", "DAV:")] [xml|
+        root = XML.Element "D:lockinfo" (Map.fromList [("xmlns:D", "DAV:")]) [xml|
 <D:lockscope>
   <D:exclusive>
 <D:locktype>

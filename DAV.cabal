@@ -24,32 +24,35 @@ library
   exposed-modules:  Network.Protocol.HTTP.DAV
   other-modules:    Network.Protocol.HTTP.DAV.TH
   ghc-options:       -Wall
-  build-depends:       base ==4.5.*
+  build-depends:       base >= 4.5                 && <= 5
                      , bytestring
                      , case-insensitive >= 0.4
+                     , containers
                      , http-conduit >= 1.4
                      , http-types >= 0.6
-                     , lens >= 2.4
+                     , lens >= 3.0
                      , lifted-base >= 0.1
                      , mtl >= 2.1
                      , resourcet >= 0.3
                      , transformers >= 0.3
-                     , xml-conduit >= 0.7          && <= 0.7.0.3
-                     , xml-hamlet >= 0.3           && <= 0.3.0.1
+                     , xml-conduit >= 1.0          && <= 1.1
+                     , xml-hamlet >= 0.4           && <= 0.5
 executable hdav
   main-is:           hdav.hs
   ghc-options:       -Wall
-  build-depends:       base ==4.5.*
+  build-depends:       base >= 4.5                 && <= 5
+                     , bytestring
                      , bytestring
                      , case-insensitive >= 0.4
                      , cmdargs >= 0.9
+                     , containers
                      , http-conduit >= 1.4
                      , http-types >= 0.6
-                     , lens >= 2.4
+                     , lens >= 3.0
                      , lifted-base >= 0.1
                      , mtl >= 2.1
                      , network >= 2.3
                      , resourcet >= 0.3
                      , transformers >= 0.3
-                     , xml-conduit >= 0.7          && <= 0.7.0.3
-                     , xml-hamlet >= 0.3           && <= 0.3.0.1
+                     , xml-conduit >= 1.0          && <= 1.1
+                     , xml-hamlet >= 0.4           && <= 0.5
