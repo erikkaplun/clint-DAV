@@ -22,6 +22,8 @@ import Paths_DAV (version)
 import Data.Version (showVersion)
 import Data.Maybe (fromMaybe, fromJust)
 import Control.Monad (unless)
+import Text.XML (renderLBS, def)
+import qualified Data.ByteString.Lazy.Char8 as B
 
 import Network (withSocketsDo)
 
@@ -29,7 +31,7 @@ import Network.URI (normalizePathSegments)
 
 import qualified System.Console.CmdArgs.Explicit as CA
 
-import Network.Protocol.HTTP.DAV (getPropsAndContent, putContentAndProps, deleteContent, moveContent, makeCollection)
+import Network.Protocol.HTTP.DAV (getProps, getPropsAndContent, putContentAndProps, deleteContent, moveContent, makeCollection)
 
 doCopy :: [(String, String)] -> IO ()
 doCopy as = do
@@ -76,12 +78,21 @@ doMakeCollection as = do
      parent url = reverse $ dropWhile (== '/')$ reverse $
         normalizePathSegments (url ++ "/..")
 
+doGetProps :: [(String, String)] -> IO ()
+doGetProps as = do
+     let url = fromJust . lookup "url" $ as
+     let username = BC8.pack . fromMaybe "" . lookup "username" $ as
+     let password = BC8.pack . fromMaybe "" . lookup "password" $ as
+     doc <- getProps url username password
+     B.putStrLn (renderLBS def doc)
+
 dispatch :: String -> [(String, String)] -> IO ()
 dispatch m as
     | m == "copy" = doCopy as
     | m == "move" = doMove as
     | m == "delete" = doDelete as
     | m == "makecollection" = doMakeCollection as
+    | m == "getprops" = doGetProps as
     | otherwise = fail "Unexpected condition."
 
 showHelp :: IO ()
@@ -118,6 +129,10 @@ arguments = CA.modes "hdav" [] "hdav WebDAV client" [
 		, CA.flagReq ["password"] (upd "password") "PASSWORD" "password for URL"
 		, CA.flagHelpSimple (("help",""):)]) { CA.modeArgs = ([(CA.flagArg (upd "url") "URL") { CA.argRequire = True }], Nothing) }
               , (CA.mode "makecollection" [("mode", "makecollection")] "makecollecton" (CA.flagArg (upd "url") "URL") [
+	          CA.flagReq ["username"] (upd "username") "USERNAME" "username for URL"
+		, CA.flagReq ["password"] (upd "password") "PASSWORD" "password for URL"
+		, CA.flagHelpSimple (("help",""):)]) { CA.modeArgs = ([(CA.flagArg (upd "url") "URL") { CA.argRequire = True }], Nothing) }
+              , (CA.mode "getprops" [("mode", "getprops")] "getprops" (CA.flagArg (upd "url") "URL") [
 	          CA.flagReq ["username"] (upd "username") "USERNAME" "username for URL"
 		, CA.flagReq ["password"] (upd "password") "PASSWORD" "password for URL"
 		, CA.flagHelpSimple (("help",""):)]) { CA.modeArgs = ([(CA.flagArg (upd "url") "URL") { CA.argRequire = True }], Nothing) }

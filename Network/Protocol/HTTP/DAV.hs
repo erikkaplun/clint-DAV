@@ -21,6 +21,7 @@
 module Network.Protocol.HTTP.DAV (
     DAVState
   , DAVContext(..)
+  , getProps
   , getPropsAndContent
   , putContentAndProps
   , deleteContent
@@ -189,6 +190,9 @@ props2patch = XML.renderLBS XML.def . patch . props . fromDocument
                    , "{DAV:}supportedlock"
                    ]
 
+getProps :: String -> B.ByteString -> B.ByteString -> IO XML.Document
+getProps url username password = withDS url username password getAllProps
+
 getPropsAndContent :: String -> B.ByteString -> B.ByteString -> IO (XML.Document, (Maybe B.ByteString, BL.ByteString))
 getPropsAndContent url username password = withDS url username password $ do
     getOptions
@@ -230,6 +234,8 @@ makeCollection url username password = withDS url username password $
         (matchStatusCodeException conflict409)
         (mkCol >> return True)
         (\_ -> return False)
+
+
 
 propname :: XML.Document
 propname = XML.Document (XML.Prologue [] Nothing []) root []
