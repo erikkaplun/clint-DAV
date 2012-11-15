@@ -47,7 +47,7 @@ executable hdav
                      , cmdargs >= 0.9
                      , containers
                      , http-conduit >= 1.4
-                     , http-types >= 0.6
+                     , http-types >= 0.7
                      , lens >= 3.0
                      , lifted-base >= 0.1
                      , mtl >= 2.1
