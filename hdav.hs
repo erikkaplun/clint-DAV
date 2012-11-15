@@ -21,12 +21,15 @@ import qualified Data.ByteString.Char8 as BC8
 import Paths_DAV (version)
 import Data.Version (showVersion)
 import Data.Maybe (fromMaybe, fromJust)
+import Control.Monad (unless)
 
 import Network (withSocketsDo)
 
+import Network.URI (normalizePathSegments)
+
 import qualified System.Console.CmdArgs.Explicit as CA
 
-import Network.Protocol.HTTP.DAV (getPropsAndContent, putContentAndProps, deleteContent, moveContent)
+import Network.Protocol.HTTP.DAV (getPropsAndContent, putContentAndProps, deleteContent, moveContent, makeCollection)
 
 doCopy :: [(String, String)] -> IO ()
 doCopy as = do
@@ -54,11 +57,31 @@ doMove as = do
      let password = BC8.pack . fromMaybe "" . lookup "password" $ as
      moveContent url1 (BC8.pack url2) username password
 
+doMakeCollection :: [(String, String)] -> IO ()
+doMakeCollection as = do
+     let url = fromJust . lookup "url" $ as
+     go url
+  where
+     username = BC8.pack . fromMaybe "" . lookup "username" $ as
+     password = BC8.pack . fromMaybe "" . lookup "password" $ as
+
+     go url = do
+       ok <- makeCollection url username password
+       unless ok $ do
+         go (parent url)
+         ok' <- makeCollection url username password
+         unless ok' $
+           error $ "failed creating " ++ url
+
+     parent url = reverse $ dropWhile (== '/')$ reverse $
+        normalizePathSegments (url ++ "/..")
+
 dispatch :: String -> [(String, String)] -> IO ()
 dispatch m as
     | m == "copy" = doCopy as
     | m == "move" = doMove as
     | m == "delete" = doDelete as
+    | m == "makecollection" = doMakeCollection as
     | otherwise = fail "Unexpected condition."
 
 showHelp :: IO ()
@@ -91,6 +114,10 @@ arguments = CA.modes "hdav" [] "hdav WebDAV client" [
 		, CA.flagReq ["password"] (upd "password") "PASSWORD" "password for source and target URL"
 		, CA.flagHelpSimple (("help",""):)]) { CA.modeArgs = ([(CA.flagArg (upd "sourceurl") "SOURCEURL") { CA.argRequire = True }, (CA.flagArg (upd "targeturl") "TARGETURL") { CA.argRequire = True }], Nothing) }
               , (CA.mode "delete" [("mode", "delete")] "delete" (CA.flagArg (upd "url") "URL") [
+	          CA.flagReq ["username"] (upd "username") "USERNAME" "username for URL"
+		, CA.flagReq ["password"] (upd "password") "PASSWORD" "password for URL"
+		, CA.flagHelpSimple (("help",""):)]) { CA.modeArgs = ([(CA.flagArg (upd "url") "URL") { CA.argRequire = True }], Nothing) }
+              , (CA.mode "makecollection" [("mode", "makecollection")] "makecollecton" (CA.flagArg (upd "url") "URL") [
 	          CA.flagReq ["username"] (upd "username") "USERNAME" "username for URL"
 		, CA.flagReq ["password"] (upd "password") "PASSWORD" "password for URL"
 		, CA.flagHelpSimple (("help",""):)]) { CA.modeArgs = ([(CA.flagArg (upd "url") "URL") { CA.argRequire = True }], Nothing) }

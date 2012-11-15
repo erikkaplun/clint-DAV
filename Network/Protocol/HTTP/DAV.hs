@@ -25,6 +25,7 @@ module Network.Protocol.HTTP.DAV (
   , putContentAndProps
   , deleteContent
   , moveContent
+  , makeCollection
   , module Network.Protocol.HTTP.DAV.TH
 ) where
 
@@ -45,7 +46,7 @@ import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
 
 import Network.HTTP.Conduit (httpLbs, parseUrl, applyBasicAuth, Request(..), RequestBody(..), Response(..), newManager, closeManager, ManagerSettings(..), def, HttpException(..))
-import Network.HTTP.Types (hContentType, Method, RequestHeaders, unauthorized401)
+import Network.HTTP.Types (hContentType, Method, Status, RequestHeaders, unauthorized401, conflict409)
 
 import qualified Text.XML as XML
 import Text.XML.Cursor (($/), (&/), element, node, fromDocument, checkName)
@@ -74,14 +75,16 @@ davRequest meth addlhdrs rbody = do
     ctx <- get
     let req = (ctx ^. baseRequest) { method = meth, requestHeaders = (mk "User-Agent", "hDav 9.0"):addlhdrs, requestBody = rbody }
     let authreq = applyBasicAuth (ctx ^. basicusername) (ctx ^. basicpassword) req
-    resp <- lift (catchJust (is401Exception)
+    resp <- lift (catchJust (matchStatusCodeException unauthorized401)
                             (httpLbs req (ctx ^. httpManager))
                             (\_ -> httpLbs authreq (ctx ^. httpManager)))
     return resp
 
-is401Exception :: HttpException -> Maybe ()
-is401Exception (StatusCodeException s _) = if s == unauthorized401 then Just () else Nothing
-is401Exception _ = Nothing
+matchStatusCodeException :: Status -> HttpException -> Maybe ()
+matchStatusCodeException want (StatusCodeException s _)
+    | s == want = Just ()
+    | otherwise = Nothing
+matchStatusCodeException _ _ = Nothing
 
 emptyBody :: RequestBody m
 emptyBody = RequestBodyLBS BL.empty
@@ -148,6 +151,11 @@ mvContent newurl = do
     _ <- davRequest "MOVE" ahs emptyBody
     return ()
 
+mkCol :: MonadResourceBase m => DAVState m ()
+mkCol = do
+    _ <- davRequest "MKCOL" [] emptyBody
+    return ()
+
 parenthesize :: B.ByteString -> B.ByteString
 parenthesize x = B.concat ["(", x, ")"]
 
@@ -210,6 +218,18 @@ deleteContent url username password = withDS url username password $ do
 moveContent :: String -> B.ByteString -> B.ByteString -> B.ByteString -> IO ()
 moveContent url newurl username password = withDS url username password $
     mvContent newurl
+
+-- | Creates a WebDAV collection, which is similar to a directory.
+--
+-- Returns False if the collection could not be made due to an intermediate
+-- collection not existing. (Ie, collection /a/b/c/d cannot be made until
+-- collection /a/b/c exists.)
+makeCollection :: String -> B.ByteString -> B.ByteString -> IO Bool
+makeCollection url username password = withDS url username password $
+    catchJust 
+        (matchStatusCodeException conflict409)
+        (mkCol >> return True)
+        (\_ -> return False)
 
 propname :: XML.Document
 propname = XML.Document (XML.Prologue [] Nothing []) root []
