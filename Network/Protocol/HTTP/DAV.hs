@@ -23,13 +23,14 @@ module Network.Protocol.HTTP.DAV (
   , DAVContext(..)
   , getPropsAndContent
   , putContentAndProps
+  , deleteContent
   , module Network.Protocol.HTTP.DAV.TH
 ) where
 
 import Network.Protocol.HTTP.DAV.TH
 
 import Control.Applicative (liftA2)
-import Control.Exception.Lifted (catchJust, finally)
+import Control.Exception.Lifted (catchJust, finally, bracketOnError)
 import Control.Lens ((.~), (^.))
 import Control.Monad (when)
 import Control.Monad.Trans (lift)
@@ -135,6 +136,11 @@ putContent (ct, body) = do
     _ <- davRequest "PUT" ahs (RequestBodyLBS body)
     return ()
 
+delContent :: MonadResourceBase m => DAVState m ()
+delContent = do
+    _ <- davRequest "DELETE" [] emptyBody
+    return ()
+
 parenthesize :: B.ByteString -> B.ByteString
 parenthesize x = B.concat ["(", x, ")"]
 
@@ -182,6 +188,15 @@ putContentAndProps url username password (p, b) = withDS url username password $
     when (supportsLocking o) (lockResource False)
     (do putContent b
         putProps p) `finally` when (supportsLocking o) (unlockResource)
+
+deleteContent :: String -> B.ByteString -> B.ByteString -> IO ()
+deleteContent url username password = withDS url username password $ do
+    getOptions
+    o <- get
+    let lock = when (supportsLocking o) (lockResource False)
+    -- a successful delete destroys locks, so only unlock on error
+    let unlock = when (supportsLocking o) (unlockResource)
+    bracketOnError lock (\_ -> unlock) (\_ -> delContent)
 
 propname :: XML.Document
 propname = XML.Document (XML.Prologue [] Nothing []) root []

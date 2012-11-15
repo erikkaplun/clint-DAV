@@ -24,7 +24,7 @@ import Network (withSocketsDo)
 
 import qualified System.Console.CmdArgs.Explicit as CA
 
-import Network.Protocol.HTTP.DAV (getPropsAndContent, putContentAndProps)
+import Network.Protocol.HTTP.DAV (getPropsAndContent, putContentAndProps, deleteContent)
 
 doCopy :: [(String, String)] -> IO ()
 doCopy as = do
@@ -37,9 +37,17 @@ doCopy as = do
      (p, b) <- getPropsAndContent url1 sourceUsername sourcePassword
      putContentAndProps url2 targetUsername targetPassword (p, b)
 
+doDelete :: [(String, String)] -> IO ()
+doDelete as = do
+     let url = fromJust . lookup "url" $ as
+     let username = BC8.pack . fromMaybe "" . lookup "username" $ as
+     let password = BC8.pack . fromMaybe "" . lookup "password" $ as
+     deleteContent url username password
+
 dispatch :: String -> [(String, String)] -> IO ()
 dispatch m as
     | m == "copy" = doCopy as
+    | m == "delete" = doDelete as
     | otherwise = fail "Unexpected condition."
 
 showHelp :: IO ()
@@ -67,5 +75,9 @@ arguments = CA.modes "hdav" [] "hdav WebDAV client" [
 		, CA.flagReq ["target-username"] (upd "target-username") "USERNAME" "username for target URL"
 		, CA.flagReq ["target-password"] (upd "target-password") "PASSWORD" "password for target URL"
 		, CA.flagHelpSimple (("help",""):)]) { CA.modeArgs = ([(CA.flagArg (upd "sourceurl") "SOURCEURL") { CA.argRequire = True }, (CA.flagArg (upd "targeturl") "TARGETURL") { CA.argRequire = True }], Nothing) }
+              , (CA.mode "delete" [("mode", "delete")] "delete" (CA.flagArg (upd "url") "URL") [
+	          CA.flagReq ["username"] (upd "username") "USERNAME" "username for URL"
+		, CA.flagReq ["password"] (upd "password") "PASSWORD" "password for URL"
+		, CA.flagHelpSimple (("help",""):)]) { CA.modeArgs = ([(CA.flagArg (upd "url") "URL") { CA.argRequire = True }], Nothing) }
 	    ]
     where upd msg x v = Right $ (msg,x):v
