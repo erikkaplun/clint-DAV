@@ -230,12 +230,10 @@ moveContent url newurl username password = withDS url username password $
 -- collection /a/b/c exists.)
 makeCollection :: String -> B.ByteString -> B.ByteString -> IO Bool
 makeCollection url username password = withDS url username password $
-    catchJust 
+    catchJust
         (matchStatusCodeException conflict409)
         (mkCol >> return True)
         (\_ -> return False)
-
-
 
 propname :: XML.Document
 propname = XML.Document (XML.Prologue [] Nothing []) root []
