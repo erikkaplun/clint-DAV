@@ -157,10 +157,12 @@ props2patch = XML.renderLBS XML.def . patch . props . fromDocument
    where
        props cursor = map node (cursor $/ element "{DAV:}response" &/ element "{DAV:}propstat" &/ element "{DAV:}prop" &/ checkName (not . flip elem blacklist))
        patch prop = XML.Document (XML.Prologue [] Nothing []) (root prop) []
-       root prop = XML.Element "D:propertyupdate" (Map.fromList [("xmlns:D", "DAV:")])
+       root [] = propertyupdate []
+       root prop = propertyupdate
            [ XML.NodeElement $ XML.Element "D:set" Map.empty
 	     [ XML.NodeElement $ XML.Element "D:prop" Map.empty prop ]
 	   ]
+       propertyupdate = XML.Element "D:propertyupdate" (Map.fromList [("xmlns:D", "DAV:")])
        blacklist = [ "{DAV:}creationdate"
                    , "{DAV:}displayname"
                    , "{DAV:}getcontentlength"
