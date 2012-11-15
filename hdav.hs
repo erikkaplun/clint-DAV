@@ -18,6 +18,8 @@
 
 import qualified Data.ByteString.Char8 as BC8
 
+import Paths_DAV (version)
+import Data.Version (showVersion)
 import Data.Maybe (fromMaybe, fromJust)
 
 import Network (withSocketsDo)
@@ -55,7 +57,7 @@ showHelp = print $ CA.helpText [] CA.HelpFormatDefault arguments
 
 main :: IO ()
 main = withSocketsDo $ do
-    putStrLn "hDAV version 0.0.0, Copyright (C) 2012  Clint Adams\n\
+    putStrLn $ "hDAV version " ++ showVersion version ++ ", Copyright (C) 2012  Clint Adams\n\
    \hDAV comes with ABSOLUTELY NO WARRANTY.\n\
    \This is free software, and you are welcome to redistribute it\n\
    \under certain conditions.\n\n"
