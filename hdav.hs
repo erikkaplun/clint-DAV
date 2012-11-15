@@ -26,7 +26,7 @@ import Network (withSocketsDo)
 
 import qualified System.Console.CmdArgs.Explicit as CA
 
-import Network.Protocol.HTTP.DAV (getPropsAndContent, putContentAndProps, deleteContent)
+import Network.Protocol.HTTP.DAV (getPropsAndContent, putContentAndProps, deleteContent, moveContent)
 
 doCopy :: [(String, String)] -> IO ()
 doCopy as = do
@@ -46,9 +46,18 @@ doDelete as = do
      let password = BC8.pack . fromMaybe "" . lookup "password" $ as
      deleteContent url username password
 
+doMove :: [(String, String)] -> IO ()
+doMove as = do
+     let url1 = fromJust . lookup "sourceurl" $ as
+     let url2 = fromJust . lookup "targeturl" $ as
+     let username = BC8.pack . fromMaybe "" . lookup "username" $ as
+     let password = BC8.pack . fromMaybe "" . lookup "password" $ as
+     moveContent url1 (BC8.pack url2) username password
+
 dispatch :: String -> [(String, String)] -> IO ()
 dispatch m as
     | m == "copy" = doCopy as
+    | m == "move" = doMove as
     | m == "delete" = doDelete as
     | otherwise = fail "Unexpected condition."
 
@@ -76,6 +85,10 @@ arguments = CA.modes "hdav" [] "hdav WebDAV client" [
 		, CA.flagReq ["source-password"] (upd "source-password") "PASSWORD" "password for source URL"
 		, CA.flagReq ["target-username"] (upd "target-username") "USERNAME" "username for target URL"
 		, CA.flagReq ["target-password"] (upd "target-password") "PASSWORD" "password for target URL"
+		, CA.flagHelpSimple (("help",""):)]) { CA.modeArgs = ([(CA.flagArg (upd "sourceurl") "SOURCEURL") { CA.argRequire = True }, (CA.flagArg (upd "targeturl") "TARGETURL") { CA.argRequire = True }], Nothing) }
+              , (CA.mode "move" [("mode", "move")] "move" (CA.flagArg (upd "sourceurl") "SOURCEURL") [
+	          CA.flagReq ["username"] (upd "username") "USERNAME" "username for source and target URL"
+		, CA.flagReq ["password"] (upd "password") "PASSWORD" "password for source and target URL"
 		, CA.flagHelpSimple (("help",""):)]) { CA.modeArgs = ([(CA.flagArg (upd "sourceurl") "SOURCEURL") { CA.argRequire = True }, (CA.flagArg (upd "targeturl") "TARGETURL") { CA.argRequire = True }], Nothing) }
               , (CA.mode "delete" [("mode", "delete")] "delete" (CA.flagArg (upd "url") "URL") [
 	          CA.flagReq ["username"] (upd "username") "USERNAME" "username for URL"

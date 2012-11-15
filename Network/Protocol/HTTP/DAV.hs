@@ -24,6 +24,7 @@ module Network.Protocol.HTTP.DAV (
   , getPropsAndContent
   , putContentAndProps
   , deleteContent
+  , moveContent
   , module Network.Protocol.HTTP.DAV.TH
 ) where
 
@@ -141,6 +142,12 @@ delContent = do
     _ <- davRequest "DELETE" [] emptyBody
     return ()
 
+mvContent :: MonadResourceBase m => B.ByteString -> DAVState m ()
+mvContent newurl = do
+    let ahs = [ (mk "Destination", newurl) ]
+    _ <- davRequest "MOVE" ahs emptyBody
+    return ()
+
 parenthesize :: B.ByteString -> B.ByteString
 parenthesize x = B.concat ["(", x, ")"]
 
@@ -199,6 +206,10 @@ deleteContent url username password = withDS url username password $ do
     -- a successful delete destroys locks, so only unlock on error
     let unlock = when (supportsLocking o) (unlockResource)
     bracketOnError lock (\_ -> unlock) (\_ -> delContent)
+
+moveContent :: String -> B.ByteString -> B.ByteString -> B.ByteString -> IO ()
+moveContent url newurl username password = withDS url username password $
+    mvContent newurl
 
 propname :: XML.Document
 propname = XML.Document (XML.Prologue [] Nothing []) root []
