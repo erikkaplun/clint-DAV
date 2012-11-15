@@ -57,3 +57,13 @@ executable hdav
                      , transformers >= 0.3
                      , xml-conduit >= 1.0          && <= 1.1
                      , xml-hamlet >= 0.4           && <= 0.5
+
+source-repository head
+  type:     git
+  location: git://anonscm.debian.org/users/clint/DAV.git
+  branch:   master
+
+source-repository this
+  type:     git
+  location: git://anonscm.debian.org/users/clint/DAV.git
+  tag:      DAV/0.1
