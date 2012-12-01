@@ -24,6 +24,7 @@ module Network.Protocol.HTTP.DAV (
   , getProps
   , getPropsAndContent
   , putContentAndProps
+  , putContent
   , deleteContent
   , moveContent
   , makeCollection
@@ -121,33 +122,33 @@ unlockResource = do
 supportsLocking :: DAVContext a -> Bool
 supportsLocking = liftA2 (&&) ("LOCK" `elem`) ("UNLOCK" `elem`) . _allowedMethods
 
-getAllProps :: MonadResourceBase m => DAVState m XML.Document
-getAllProps = do
+getPropsM :: MonadResourceBase m => DAVState m XML.Document
+getPropsM = do
     let ahs = [(hContentType, "application/xml; charset=\"utf-8\"")]
     propresp <- davRequest "PROPFIND" ahs (xmlBody propname)
     return $ (XML.parseLBS_ def . responseBody) propresp
 
-getContent :: MonadResourceBase m => DAVState m (Maybe B.ByteString, BL.ByteString)
-getContent = do
+getContentM :: MonadResourceBase m => DAVState m (Maybe B.ByteString, BL.ByteString)
+getContentM = do
     resp <- davRequest "GET" [] emptyBody
     let ct = lookup (hContentType) (responseHeaders resp)
     return $ (ct, responseBody resp)
 
-putContent :: MonadResourceBase m => (Maybe B.ByteString, BL.ByteString) -> DAVState m ()
-putContent (ct, body) = do
+putContentM :: MonadResourceBase m => (Maybe B.ByteString, BL.ByteString) -> DAVState m ()
+putContentM (ct, body) = do
     d <- get
     let ahs' = fromMaybe [] (fmap (return . (,) (mk "If") . parenthesize) (d ^. lockToken))
     let ahs = ahs' ++ fromMaybe [] (fmap (return . (,) (hContentType)) ct)
     _ <- davRequest "PUT" ahs (RequestBodyLBS body)
     return ()
 
-delContent :: MonadResourceBase m => DAVState m ()
-delContent = do
+delContentM :: MonadResourceBase m => DAVState m ()
+delContentM = do
     _ <- davRequest "DELETE" [] emptyBody
     return ()
 
-mvContent :: MonadResourceBase m => B.ByteString -> DAVState m ()
-mvContent newurl = do
+moveContentM :: MonadResourceBase m => B.ByteString -> DAVState m ()
+moveContentM newurl = do
     let ahs = [ (mk "Destination", newurl) ]
     _ <- davRequest "MOVE" ahs emptyBody
     return ()
@@ -160,8 +161,8 @@ mkCol = do
 parenthesize :: B.ByteString -> B.ByteString
 parenthesize x = B.concat ["(", x, ")"]
 
-putProps :: MonadResourceBase m => XML.Document -> DAVState m ()
-putProps props = do
+putPropsM :: MonadResourceBase m => XML.Document -> DAVState m ()
+putPropsM props = do
     d <- get
     let ah' = (hContentType, "application/xml; charset=\"utf-8\"")
     let ahs = ah':fromMaybe [] (fmap (return . (,) (mk "If") . parenthesize) (_lockToken d))
@@ -191,24 +192,31 @@ props2patch = XML.renderLBS XML.def . patch . props . fromDocument
                    ]
 
 getProps :: String -> B.ByteString -> B.ByteString -> IO XML.Document
-getProps url username password = withDS url username password getAllProps
+getProps url username password = withDS url username password getPropsM
 
 getPropsAndContent :: String -> B.ByteString -> B.ByteString -> IO (XML.Document, (Maybe B.ByteString, BL.ByteString))
 getPropsAndContent url username password = withDS url username password $ do
     getOptions
     o <- get
     when (supportsLocking o) (lockResource True)
-    (do props <- getAllProps
-        body <- getContent
+    (do props <- getPropsM
+        body <- getContentM
         return (props, body)) `finally` when (supportsLocking o) (unlockResource)
+
+putContent :: String -> B.ByteString -> B.ByteString -> (Maybe B.ByteString, BL.ByteString) -> IO ()
+putContent url username password b = withDS url username password $ do
+    getOptions
+    o <- get
+    when (supportsLocking o) (lockResource False)
+    putContentM b `finally` when (supportsLocking o) (unlockResource)
 
 putContentAndProps :: String -> B.ByteString -> B.ByteString -> (XML.Document, (Maybe B.ByteString, BL.ByteString)) -> IO ()
 putContentAndProps url username password (p, b) = withDS url username password $ do
     getOptions
     o <- get
     when (supportsLocking o) (lockResource False)
-    (do putContent b
-        putProps p) `finally` when (supportsLocking o) (unlockResource)
+    (do putContentM b
+        putPropsM p) `finally` when (supportsLocking o) (unlockResource)
 
 deleteContent :: String -> B.ByteString -> B.ByteString -> IO ()
 deleteContent url username password = withDS url username password $ do
@@ -217,11 +225,11 @@ deleteContent url username password = withDS url username password $ do
     let lock = when (supportsLocking o) (lockResource False)
     -- a successful delete destroys locks, so only unlock on error
     let unlock = when (supportsLocking o) (unlockResource)
-    bracketOnError lock (\_ -> unlock) (\_ -> delContent)
+    bracketOnError lock (\_ -> unlock) (\_ -> delContentM)
 
 moveContent :: String -> B.ByteString -> B.ByteString -> B.ByteString -> IO ()
 moveContent url newurl username password = withDS url username password $
-    mvContent newurl
+    moveContentM newurl
 
 -- | Creates a WebDAV collection, which is similar to a directory.
 --
