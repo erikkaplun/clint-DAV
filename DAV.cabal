@@ -29,14 +29,14 @@ library
                      , bytestring
                      , case-insensitive >= 0.4
                      , containers
-                     , http-conduit >= 1.4
+                     , http-conduit >= 1.9.0
                      , http-types >= 0.7
                      , lens >= 3.0
                      , lifted-base >= 0.1
                      , mtl >= 2.1
                      , resourcet >= 0.3
                      , transformers >= 0.3
-                     , xml-conduit >= 1.0          && <= 1.1
+                     , xml-conduit >= 1.0          && <= 1.2
                      , xml-hamlet >= 0.4           && <= 0.5
 executable hdav
   main-is:           hdav.hs
@@ -47,7 +47,7 @@ executable hdav
                      , case-insensitive >= 0.4
                      , cmdargs >= 0.9
                      , containers
-                     , http-conduit >= 1.4
+                     , http-conduit >= 1.9.0
                      , http-types >= 0.7
                      , lens >= 3.0
                      , lifted-base >= 0.1
@@ -55,7 +55,7 @@ executable hdav
                      , network >= 2.3
                      , resourcet >= 0.3
                      , transformers >= 0.3
-                     , xml-conduit >= 1.0          && <= 1.1
+                     , xml-conduit >= 1.0          && <= 1.2
                      , xml-hamlet >= 0.4           && <= 0.5
 
 source-repository head
