@@ -83,7 +83,7 @@ davRequest meth addlhdrs rbody = do
     return resp
 
 matchStatusCodeException :: Status -> HttpException -> Maybe ()
-matchStatusCodeException want (StatusCodeException s _)
+matchStatusCodeException want (StatusCodeException s _ _)
     | s == want = Just ()
     | otherwise = Nothing
 matchStatusCodeException _ _ = Nothing
