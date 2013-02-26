@@ -1,5 +1,5 @@
 -- hdav.hs: WebDAV client
--- Copyright © 2012  Clint Adams
+-- Copyright © 2012-2013  Clint Adams
 --
 -- vim: softtabstop=4:shiftwidth=4:expandtab
 --
@@ -100,7 +100,7 @@ showHelp = print $ CA.helpText [] CA.HelpFormatDefault arguments
 
 main :: IO ()
 main = withSocketsDo $ do
-    putStrLn $ "hDAV version " ++ showVersion version ++ ", Copyright (C) 2012  Clint Adams\n\
+    putStrLn $ "hDAV version " ++ showVersion version ++ ", Copyright (C) 2012-2013  Clint Adams\n\
    \hDAV comes with ABSOLUTELY NO WARRANTY.\n\
    \This is free software, and you are welcome to redistribute it\n\
    \under certain conditions.\n\n"

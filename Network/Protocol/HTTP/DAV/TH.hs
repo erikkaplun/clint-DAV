@@ -1,5 +1,5 @@
 -- TH.hs: WebDAV client library - bits using TH
--- Copyright © 2012  Clint Adams
+-- Copyright © 2012-2013  Clint Adams
 --
 -- vim: softtabstop=4:shiftwidth=4:expandtab
 --
