@@ -31,6 +31,7 @@ module Network.Protocol.HTTP.DAV (
   , module Network.Protocol.HTTP.DAV.TH
 ) where
 
+import Paths_DAV (version)
 import Network.Protocol.HTTP.DAV.TH
 
 import Control.Applicative (liftA2)
@@ -42,10 +43,12 @@ import Control.Monad.Trans.Resource (MonadResourceBase, ResourceT, runResourceT,
 import Control.Monad.Trans.State.Lazy (evalStateT, StateT, get, modify)
 
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Char8 as BC8
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Map as Map
 
 import Data.Maybe (fromMaybe)
+import Data.Version (showVersion)
 
 import Network.HTTP.Conduit (httpLbs, parseUrl, applyBasicAuth, Request(..), RequestBody(..), Response(..), newManager, closeManager, ManagerSettings(..), def, HttpException(..))
 import Network.HTTP.Types (hContentType, Method, Status, RequestHeaders, unauthorized401, conflict409)
@@ -75,7 +78,7 @@ withDS url username password f = runResourceT $ do
 davRequest :: MonadResourceBase m => Method -> RequestHeaders -> RequestBody (ResourceT m) -> DAVState m (Response BL.ByteString)
 davRequest meth addlhdrs rbody = do
     ctx <- get
-    let req = (ctx ^. baseRequest) { method = meth, requestHeaders = (mk "User-Agent", "hDav 9.0"):addlhdrs, requestBody = rbody }
+    let req = (ctx ^. baseRequest) { method = meth, requestHeaders = (mk "User-Agent", (BC8.pack ("hDav " ++ showVersion version))):addlhdrs, requestBody = rbody }
     let authreq = applyBasicAuth (ctx ^. basicusername) (ctx ^. basicpassword) req
     resp <- lift (catchJust (matchStatusCodeException unauthorized401)
                             (httpLbs req (ctx ^. httpManager))
