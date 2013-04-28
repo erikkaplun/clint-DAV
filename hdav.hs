@@ -31,7 +31,7 @@ import Network (withSocketsDo)
 
 import Network.URI (normalizePathSegments)
 
-import Network.Protocol.HTTP.DAV (getProps, getPropsAndContent, putContentAndProps, deleteContent, moveContent, makeCollection)
+import Network.Protocol.HTTP.DAV (getProps, getPropsAndContent, putContent, putContentAndProps, deleteContent, moveContent, makeCollection)
 
 import Options.Applicative.Builder (argument, command, help, idm, info, long, metavar, progDesc, str, strOption, subparser)
 import Options.Applicative.Extra (execParser)
@@ -46,7 +46,7 @@ data Options = Options {
   , password2 :: String
 }
 
-data Command = Copy Options | Move Options | Delete Options | MakeCollection Options | GetProps Options
+data Command = Copy Options | Move Options | Delete Options | MakeCollection Options | GetProps Options | Put FilePath Options
 
 oneUUP :: Parser Options
 oneUUP = Options
@@ -139,12 +139,18 @@ doGetProps o = do
      doc <- getProps (url o) (BC8.pack $ username o) (BC8.pack $ password o)
      B.putStrLn (renderLBS def doc)
 
+doPut :: FilePath -> Options -> IO ()
+doPut file o = do
+     bs <- B.readFile file
+     putContent (url o) (BC8.pack $ username o) (BC8.pack $ password o) (Nothing, bs)
+
 dispatch :: Command -> IO ()
 dispatch (Copy o) = doCopy o
 dispatch (Move o) = doMove o
 dispatch (Delete o) = doDelete o
 dispatch (MakeCollection o) = doMakeCollection o
 dispatch (GetProps o) = doGetProps o
+dispatch (Put f o) = doPut f o
 
 main :: IO ()
 main = withSocketsDo $ do
@@ -162,4 +168,5 @@ cmd = subparser
  <> command "delete" (info ( Delete <$> oneUUP ) ( progDesc "Delete props and data" ))
  <> command "makecollection" (info ( MakeCollection <$> oneUUP ) ( progDesc "Make a new collection" ))
  <> command "getprops" (info ( GetProps <$> oneUUP )  ( progDesc "Fetch props and output them to stdout" ))
+ <> command "put" (info ( Put <$> argument str ( metavar "FILE" ) <*> oneUUP )  ( progDesc "Put file to URL" ))
   )
