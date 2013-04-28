@@ -31,7 +31,7 @@ import Network (withSocketsDo)
 
 import Network.URI (normalizePathSegments)
 
-import Network.Protocol.HTTP.DAV (getProps, getPropsAndContent, putContent, putContentAndProps, deleteContent, moveContent, makeCollection, Depth(..))
+import Network.Protocol.HTTP.DAV (getProps, getPropsAndContent, putContent, putContentAndProps, deleteContent, moveContent, makeCollection, Depth(..), caldavReport)
 
 import Options.Applicative.Builder (argument, command, help, idm, info, long, metavar, option, progDesc, str, strOption, subparser)
 import Options.Applicative.Extra (execParser)
@@ -46,7 +46,7 @@ data Options = Options {
   , password2 :: String
 }
 
-data Command = Copy Options | Move Options | Delete Options | MakeCollection Options | GetProps Options (Maybe Depth) | Put FilePath Options
+data Command = Copy Options | Move Options | Delete Options | MakeCollection Options | GetProps Options (Maybe Depth) | Put FilePath Options | CaldavReport Options
 
 oneUUP :: Parser Options
 oneUUP = Options
@@ -144,6 +144,11 @@ doPut file o = do
      bs <- B.readFile file
      putContent (url o) (BC8.pack $ username o) (BC8.pack $ password o) (Nothing, bs)
 
+doReport :: Options -> IO ()
+doReport o = do
+     doc <- caldavReport (url o) (BC8.pack $ username o) (BC8.pack $ password o)
+     B.putStrLn (renderLBS def doc)
+
 dispatch :: Command -> IO ()
 dispatch (Copy o) = doCopy o
 dispatch (Move o) = doMove o
@@ -151,6 +156,7 @@ dispatch (Delete o) = doDelete o
 dispatch (MakeCollection o) = doMakeCollection o
 dispatch (GetProps o md) = doGetProps o md
 dispatch (Put f o) = doPut f o
+dispatch (CaldavReport o) = doReport o
 
 main :: IO ()
 main = withSocketsDo $ do
@@ -169,4 +175,6 @@ cmd = subparser
  <> command "makecollection" (info ( MakeCollection <$> oneUUP ) ( progDesc "Make a new collection" ))
  <> command "move" (info ( Move <$> twoUoneUP ) ( progDesc "Move props and data from one location to another in the same DAV space" ))
  <> command "put" (info ( Put <$> argument str ( metavar "FILE" ) <*> oneUUP )  ( progDesc "Put file to URL" ))
+
+ <> command "caldav-report" (info ( CaldavReport <$> oneUUP )  ( progDesc "Get CalDAV report" ))
   )

@@ -28,6 +28,7 @@ module Network.Protocol.HTTP.DAV (
   , deleteContent
   , moveContent
   , makeCollection
+  , caldavReport
   , module Network.Protocol.HTTP.DAV.TH
 ) where
 
@@ -129,6 +130,9 @@ unlockResource = do
 supportsLocking :: DAVContext a -> Bool
 supportsLocking = liftA2 (&&) ("LOCK" `elem`) ("UNLOCK" `elem`) . _allowedMethods
 
+supportsCalDAV :: DAVContext a -> Bool
+supportsCalDAV = ("calendar-access" `elem`) . _complianceClasses
+
 getPropsM :: MonadResourceBase m => DAVState m XML.Document
 getPropsM = do
     let ahs = [(hContentType, "application/xml; charset=\"utf-8\"")]
@@ -198,6 +202,12 @@ props2patch = XML.renderLBS XML.def . patch . props . fromDocument
                    , "{DAV:}supportedlock"
                    ]
 
+caldavReportM :: MonadResourceBase m => DAVState m XML.Document
+caldavReportM = do
+    let ahs = [(hContentType, "application/xml; charset=\"utf-8\"")]
+    calrresp <- davRequest "REPORT" ahs (xmlBody calendarquery)
+    return $ (XML.parseLBS_ def . responseBody) calrresp
+
 getProps :: String -> B.ByteString -> B.ByteString -> Maybe Depth -> IO XML.Document
 getProps url username password md = withDS url username password md getPropsM
 
@@ -238,6 +248,9 @@ moveContent :: String -> B.ByteString -> B.ByteString -> B.ByteString -> IO ()
 moveContent url newurl username password = withDS url username password Nothing $
     moveContentM newurl
 
+caldavReport :: String -> B.ByteString -> B.ByteString -> IO XML.Document
+caldavReport url username password = withDS url username password (Just Depth1) $ caldavReportM
+
 -- | Creates a WebDAV collection, which is similar to a directory.
 --
 -- Returns False if the collection could not be made due to an intermediate
@@ -268,3 +281,13 @@ locky = XML.Document (XML.Prologue [] Nothing []) root []
 <D:owner>Haskell DAV user
 |]
 
+calendarquery :: XML.Document
+calendarquery = XML.Document (XML.Prologue [] Nothing []) root []
+    where
+        root = XML.Element "C:calendar-query" (Map.fromList [("xmlns:D", "DAV:"),("xmlns:C", "urn:ietf:params:xml:ns:caldav")]) [xml|
+<D:prop>
+  <D:getetag>
+  <C:calendar-data>
+<C:filter>
+  <C:comp-filter name="VCALENDAR">
+|]
