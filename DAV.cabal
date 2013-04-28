@@ -45,7 +45,6 @@ executable hdav
                      , bytestring
                      , bytestring
                      , case-insensitive >= 0.4
-                     , cmdargs >= 0.9
                      , containers
                      , http-conduit >= 1.9.0
                      , http-types >= 0.7
@@ -53,6 +52,7 @@ executable hdav
                      , lifted-base >= 0.1
                      , mtl >= 2.1
                      , network >= 2.3
+                     , optparse-applicative
                      , resourcet >= 0.3
                      , transformers >= 0.3
                      , xml-conduit >= 1.0          && <= 1.2

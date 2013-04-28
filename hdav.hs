@@ -19,9 +19,11 @@
 import qualified Data.ByteString.Char8 as BC8
 
 import Paths_DAV (version)
-import Data.Version (showVersion)
-import Data.Maybe (fromMaybe, fromJust)
+import Control.Applicative ((<$>),(<*>), optional, pure)
 import Control.Monad (unless)
+import Data.Version (showVersion)
+import Data.Maybe (fromMaybe)
+import Data.Monoid ((<>))
 import Text.XML (renderLBS, def)
 import qualified Data.ByteString.Lazy.Char8 as B
 
@@ -29,74 +31,120 @@ import Network (withSocketsDo)
 
 import Network.URI (normalizePathSegments)
 
-import qualified System.Console.CmdArgs.Explicit as CA
-
 import Network.Protocol.HTTP.DAV (getProps, getPropsAndContent, putContentAndProps, deleteContent, moveContent, makeCollection)
 
-doCopy :: [(String, String)] -> IO ()
-doCopy as = do
-     let url1 = fromJust . lookup "sourceurl" $ as
-     let url2 = fromJust . lookup "targeturl" $ as
-     let sourceUsername = BC8.pack . fromMaybe "" . lookup "source-username" $ as
-     let sourcePassword = BC8.pack . fromMaybe "" . lookup "source-password" $ as
-     let targetUsername = BC8.pack . fromMaybe "" . lookup "target-username" $ as
-     let targetPassword = BC8.pack . fromMaybe "" . lookup "target-password" $ as
-     (p, b) <- getPropsAndContent url1 sourceUsername sourcePassword
-     putContentAndProps url2 targetUsername targetPassword (p, b)
+import Options.Applicative.Builder (argument, command, help, idm, info, long, metavar, progDesc, str, strOption, subparser)
+import Options.Applicative.Extra (execParser)
+import Options.Applicative.Types (Parser)
 
-doDelete :: [(String, String)] -> IO ()
-doDelete as = do
-     let url = fromJust . lookup "url" $ as
-     let username = BC8.pack . fromMaybe "" . lookup "username" $ as
-     let password = BC8.pack . fromMaybe "" . lookup "password" $ as
-     deleteContent url username password
+data Options = Options {
+    url :: String
+  , url2 :: String
+  , username :: String
+  , password :: String
+  , username2 :: String
+  , password2 :: String
+}
 
-doMove :: [(String, String)] -> IO ()
-doMove as = do
-     let url1 = fromJust . lookup "sourceurl" $ as
-     let url2 = fromJust . lookup "targeturl" $ as
-     let username = BC8.pack . fromMaybe "" . lookup "username" $ as
-     let password = BC8.pack . fromMaybe "" . lookup "password" $ as
-     moveContent url1 (BC8.pack url2) username password
+data Command = Copy Options | Move Options | Delete Options | MakeCollection Options | GetProps Options
 
-doMakeCollection :: [(String, String)] -> IO ()
-doMakeCollection as = do
-     let url = fromJust . lookup "url" $ as
-     go url
+oneUUP :: Parser Options
+oneUUP = Options
+    <$> argument str ( metavar "URL" )
+    <*> pure ""
+    <*> (fromMaybe "" <$> (optional $ strOption
+        ( long "username"
+       <> metavar "USERNAME"
+       <> help "username for URL" )))
+    <*> (fromMaybe "" <$> (optional $ strOption
+        ( long "password"
+       <> metavar "PASSWORD"
+       <> help "password for URL" )))
+    <*> pure ""
+    <*> pure ""
+
+twoUUP :: Parser Options
+twoUUP = Options
+    <$> argument str ( metavar "SOURCEURL" )
+    <*> argument str ( metavar "TARGETURL" )
+    <*> (fromMaybe "" <$> (optional $ strOption
+        ( long "source-username"
+       <> metavar "USERNAME"
+       <> help "username for source URL" )))
+    <*> (fromMaybe "" <$> (optional $ strOption
+        ( long "source-password"
+       <> metavar "PASSWORD"
+       <> help "password for source URL" )))
+    <*> (fromMaybe "" <$> (optional $ strOption
+        ( long "target-username"
+       <> metavar "USERNAME"
+       <> help "username for target URL" )))
+    <*> (fromMaybe "" <$> (optional $ strOption
+        ( long "target-password"
+       <> metavar "PASSWORD"
+       <> help "password for target URL" )))
+
+twoUoneUP :: Parser Options
+twoUoneUP = Options
+    <$> argument str ( metavar "SOURCEURL" )
+    <*> argument str ( metavar "TARGETURL" )
+    <*> (fromMaybe "" <$> (optional $ strOption
+        ( long "username"
+       <> metavar "USERNAME"
+       <> help "username for URL" )))
+    <*> (fromMaybe "" <$> (optional $ strOption
+        ( long "password"
+       <> metavar "PASSWORD"
+       <> help "password for URL" )))
+    <*> pure ""
+    <*> pure ""
+
+doCopy :: Options -> IO ()
+doCopy o = do
+     (p, b) <- getPropsAndContent sourceurl sourceUsername sourcePassword
+     putContentAndProps targeturl targetUsername targetPassword (p, b)
+     where
+         sourceurl = url o
+         targeturl = url2 o
+         sourceUsername = BC8.pack $ username o
+         sourcePassword = BC8.pack $ password o
+         targetUsername = BC8.pack $ username2 o
+         targetPassword = BC8.pack $ password2 o
+
+doDelete :: Options -> IO ()
+doDelete o = deleteContent (url o) (BC8.pack $ username o) (BC8.pack $ password o)
+
+doMove :: Options -> IO ()
+doMove o = moveContent (url o) (BC8.pack $ url2 o) (BC8.pack $ username o) (BC8.pack $ password o)
+
+doMakeCollection :: Options -> IO ()
+doMakeCollection o = go (url o)
   where
-     username = BC8.pack . fromMaybe "" . lookup "username" $ as
-     password = BC8.pack . fromMaybe "" . lookup "password" $ as
+     u = BC8.pack . username $ o
+     p = BC8.pack . password $ o
 
      go url = do
-       ok <- makeCollection url username password
+       ok <- makeCollection url u p
        unless ok $ do
          go (parent url)
-         ok' <- makeCollection url username password
+         ok' <- makeCollection url u p
          unless ok' $
            error $ "failed creating " ++ url
 
      parent url = reverse $ dropWhile (== '/')$ reverse $
         normalizePathSegments (url ++ "/..")
 
-doGetProps :: [(String, String)] -> IO ()
-doGetProps as = do
-     let url = fromJust . lookup "url" $ as
-     let username = BC8.pack . fromMaybe "" . lookup "username" $ as
-     let password = BC8.pack . fromMaybe "" . lookup "password" $ as
-     doc <- getProps url username password
+doGetProps :: Options -> IO ()
+doGetProps o = do
+     doc <- getProps (url o) (BC8.pack $ username o) (BC8.pack $ password o)
      B.putStrLn (renderLBS def doc)
 
-dispatch :: String -> [(String, String)] -> IO ()
-dispatch m as
-    | m == "copy" = doCopy as
-    | m == "move" = doMove as
-    | m == "delete" = doDelete as
-    | m == "makecollection" = doMakeCollection as
-    | m == "getprops" = doGetProps as
-    | otherwise = fail "Unexpected condition."
-
-showHelp :: IO ()
-showHelp = print $ CA.helpText [] CA.HelpFormatDefault arguments
+dispatch :: Command -> IO ()
+dispatch (Copy o) = doCopy o
+dispatch (Move o) = doMove o
+dispatch (Delete o) = doDelete o
+dispatch (MakeCollection o) = doMakeCollection o
+dispatch (GetProps o) = doGetProps o
 
 main :: IO ()
 main = withSocketsDo $ do
@@ -105,36 +153,13 @@ main = withSocketsDo $ do
    \This is free software, and you are welcome to redistribute it\n\
    \under certain conditions.\n\n"
 
-    as <- CA.processArgs arguments
-    if ("help","") `elem` as then showHelp else dispatch' as
+    execParser (info cmd idm) >>= dispatch
 
-    where dispatch' as = case lookup "mode" as of
-                          Nothing -> showHelp
-                          Just m -> dispatch m as
-
-arguments :: CA.Mode [(String,String)]
-arguments = CA.modes "hdav" [] "hdav WebDAV client" [
-              (CA.mode "copy" [("mode", "copy")] "copy" (CA.flagArg (upd "sourceurl") "SOURCEURL") [
-	          CA.flagReq ["source-username"] (upd "source-username") "USERNAME" "username for source URL"
-		, CA.flagReq ["source-password"] (upd "source-password") "PASSWORD" "password for source URL"
-		, CA.flagReq ["target-username"] (upd "target-username") "USERNAME" "username for target URL"
-		, CA.flagReq ["target-password"] (upd "target-password") "PASSWORD" "password for target URL"
-		, CA.flagHelpSimple (("help",""):)]) { CA.modeArgs = ([(CA.flagArg (upd "sourceurl") "SOURCEURL") { CA.argRequire = True }, (CA.flagArg (upd "targeturl") "TARGETURL") { CA.argRequire = True }], Nothing) }
-              , (CA.mode "move" [("mode", "move")] "move" (CA.flagArg (upd "sourceurl") "SOURCEURL") [
-	          CA.flagReq ["username"] (upd "username") "USERNAME" "username for source and target URL"
-		, CA.flagReq ["password"] (upd "password") "PASSWORD" "password for source and target URL"
-		, CA.flagHelpSimple (("help",""):)]) { CA.modeArgs = ([(CA.flagArg (upd "sourceurl") "SOURCEURL") { CA.argRequire = True }, (CA.flagArg (upd "targeturl") "TARGETURL") { CA.argRequire = True }], Nothing) }
-              , (CA.mode "delete" [("mode", "delete")] "delete" (CA.flagArg (upd "url") "URL") [
-	          CA.flagReq ["username"] (upd "username") "USERNAME" "username for URL"
-		, CA.flagReq ["password"] (upd "password") "PASSWORD" "password for URL"
-		, CA.flagHelpSimple (("help",""):)]) { CA.modeArgs = ([(CA.flagArg (upd "url") "URL") { CA.argRequire = True }], Nothing) }
-              , (CA.mode "makecollection" [("mode", "makecollection")] "makecollecton" (CA.flagArg (upd "url") "URL") [
-	          CA.flagReq ["username"] (upd "username") "USERNAME" "username for URL"
-		, CA.flagReq ["password"] (upd "password") "PASSWORD" "password for URL"
-		, CA.flagHelpSimple (("help",""):)]) { CA.modeArgs = ([(CA.flagArg (upd "url") "URL") { CA.argRequire = True }], Nothing) }
-              , (CA.mode "getprops" [("mode", "getprops")] "getprops" (CA.flagArg (upd "url") "URL") [
-	          CA.flagReq ["username"] (upd "username") "USERNAME" "username for URL"
-		, CA.flagReq ["password"] (upd "password") "PASSWORD" "password for URL"
-		, CA.flagHelpSimple (("help",""):)]) { CA.modeArgs = ([(CA.flagArg (upd "url") "URL") { CA.argRequire = True }], Nothing) }
-	    ]
-    where upd msg x v = Right $ (msg,x):v
+cmd :: Parser Command
+cmd = subparser
+  ( command "copy" (info ( Copy <$> twoUUP ) ( progDesc "Copy props and data from one location to another" ))
+ <> command "move" (info ( Move <$> twoUoneUP ) ( progDesc "Move props and data from one location to another in the same DAV space" ))
+ <> command "delete" (info ( Delete <$> oneUUP ) ( progDesc "Delete props and data" ))
+ <> command "makecollection" (info ( MakeCollection <$> oneUUP ) ( progDesc "Make a new collection" ))
+ <> command "getprops" (info ( GetProps <$> oneUUP )  ( progDesc "Fetch props and output them to stdout" ))
+  )
