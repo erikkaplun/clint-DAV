@@ -157,16 +157,16 @@ main = withSocketsDo $ do
     putStrLn $ "hDAV version " ++ showVersion version ++ ", Copyright (C) 2012-2013  Clint Adams\n\
    \hDAV comes with ABSOLUTELY NO WARRANTY.\n\
    \This is free software, and you are welcome to redistribute it\n\
-   \under certain conditions.\n\n"
+   \under certain conditions.\n"
 
     execParser (info cmd idm) >>= dispatch
 
 cmd :: Parser Command
 cmd = subparser
   ( command "copy" (info ( Copy <$> twoUUP ) ( progDesc "Copy props and data from one location to another" ))
- <> command "move" (info ( Move <$> twoUoneUP ) ( progDesc "Move props and data from one location to another in the same DAV space" ))
  <> command "delete" (info ( Delete <$> oneUUP ) ( progDesc "Delete props and data" ))
- <> command "makecollection" (info ( MakeCollection <$> oneUUP ) ( progDesc "Make a new collection" ))
  <> command "getprops" (info ( GetProps <$> oneUUP )  ( progDesc "Fetch props and output them to stdout" ))
+ <> command "makecollection" (info ( MakeCollection <$> oneUUP ) ( progDesc "Make a new collection" ))
+ <> command "move" (info ( Move <$> twoUoneUP ) ( progDesc "Move props and data from one location to another in the same DAV space" ))
  <> command "put" (info ( Put <$> argument str ( metavar "FILE" ) <*> oneUUP )  ( progDesc "Put file to URL" ))
   )
