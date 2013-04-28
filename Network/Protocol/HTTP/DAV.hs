@@ -47,7 +47,7 @@ import qualified Data.ByteString.Char8 as BC8
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Map as Map
 
-import Data.Maybe (fromMaybe)
+import Data.Maybe (catMaybes, fromMaybe)
 import Data.Version (showVersion)
 
 import Network.HTTP.Conduit (httpLbs, parseUrl, applyBasicAuth, Request(..), RequestBody(..), Response(..), newManager, closeManager, ManagerSettings(..), def, HttpException(..))
@@ -61,25 +61,29 @@ import Data.CaseInsensitive (mk)
 
 type DAVState m a = StateT (DAVContext m) (ResourceT m) a
 
-initialDS :: String -> B.ByteString -> B.ByteString -> ManagerSettings -> IO (DAVContext a)
-initialDS u username password s = do
+initialDS :: String -> B.ByteString -> B.ByteString -> Maybe Depth -> ManagerSettings -> IO (DAVContext a)
+initialDS u username password md s = do
     mgr <- newManager s
     req <- parseUrl u
-    return $ DAVContext [] req [] mgr Nothing username password
+    return $ DAVContext [] req [] mgr Nothing username password md
 
 closeDS :: DAVContext a -> IO ()
 closeDS = closeManager . _httpManager
 
-withDS :: MonadResourceBase m => String -> B.ByteString -> B.ByteString -> DAVState m a -> m a
-withDS url username password f = runResourceT $ do
-    (_, ds) <- allocate (initialDS url username password def) closeDS
+withDS :: MonadResourceBase m => String -> B.ByteString -> B.ByteString -> Maybe Depth -> DAVState m a -> m a
+withDS url username password md f = runResourceT $ do
+    (_, ds) <- allocate (initialDS url username password md def) closeDS
     evalStateT f ds
 
 davRequest :: MonadResourceBase m => Method -> RequestHeaders -> RequestBody (ResourceT m) -> DAVState m (Response BL.ByteString)
 davRequest meth addlhdrs rbody = do
     ctx <- get
-    let req = (ctx ^. baseRequest) { method = meth, requestHeaders = (mk "User-Agent", (BC8.pack ("hDav " ++ showVersion version))):addlhdrs, requestBody = rbody }
-    let authreq = applyBasicAuth (ctx ^. basicusername) (ctx ^. basicpassword) req
+    let hdrs = catMaybes
+               [ Just (mk "User-Agent", (BC8.pack ("hDav " ++ showVersion version)))
+               , fmap ((,) (mk "Depth") . BC8.pack . show) (ctx ^. depth)
+               ] ++ addlhdrs
+        req = (ctx ^. baseRequest) { method = meth, requestHeaders = hdrs, requestBody = rbody }
+        authreq = applyBasicAuth (ctx ^. basicusername) (ctx ^. basicpassword) req
     resp <- lift (catchJust (matchStatusCodeException unauthorized401)
                             (httpLbs req (ctx ^. httpManager))
                             (\_ -> httpLbs authreq (ctx ^. httpManager)))
@@ -194,11 +198,11 @@ props2patch = XML.renderLBS XML.def . patch . props . fromDocument
                    , "{DAV:}supportedlock"
                    ]
 
-getProps :: String -> B.ByteString -> B.ByteString -> IO XML.Document
-getProps url username password = withDS url username password getPropsM
+getProps :: String -> B.ByteString -> B.ByteString -> Maybe Depth -> IO XML.Document
+getProps url username password md = withDS url username password md getPropsM
 
 getPropsAndContent :: String -> B.ByteString -> B.ByteString -> IO (XML.Document, (Maybe B.ByteString, BL.ByteString))
-getPropsAndContent url username password = withDS url username password $ do
+getPropsAndContent url username password = withDS url username password (Just Depth0) $ do
     getOptions
     o <- get
     when (supportsLocking o) (lockResource True)
@@ -207,14 +211,14 @@ getPropsAndContent url username password = withDS url username password $ do
         return (props, body)) `finally` when (supportsLocking o) (unlockResource)
 
 putContent :: String -> B.ByteString -> B.ByteString -> (Maybe B.ByteString, BL.ByteString) -> IO ()
-putContent url username password b = withDS url username password $ do
+putContent url username password b = withDS url username password Nothing $ do
     getOptions
     o <- get
     when (supportsLocking o) (lockResource False)
     putContentM b `finally` when (supportsLocking o) (unlockResource)
 
 putContentAndProps :: String -> B.ByteString -> B.ByteString -> (XML.Document, (Maybe B.ByteString, BL.ByteString)) -> IO ()
-putContentAndProps url username password (p, b) = withDS url username password $ do
+putContentAndProps url username password (p, b) = withDS url username password Nothing $ do
     getOptions
     o <- get
     when (supportsLocking o) (lockResource False)
@@ -222,7 +226,7 @@ putContentAndProps url username password (p, b) = withDS url username password $
         putPropsM p) `finally` when (supportsLocking o) (unlockResource)
 
 deleteContent :: String -> B.ByteString -> B.ByteString -> IO ()
-deleteContent url username password = withDS url username password $ do
+deleteContent url username password = withDS url username password Nothing $ do
     getOptions
     o <- get
     let lock = when (supportsLocking o) (lockResource False)
@@ -231,7 +235,7 @@ deleteContent url username password = withDS url username password $ do
     bracketOnError lock (\_ -> unlock) (\_ -> delContentM)
 
 moveContent :: String -> B.ByteString -> B.ByteString -> B.ByteString -> IO ()
-moveContent url newurl username password = withDS url username password $
+moveContent url newurl username password = withDS url username password Nothing $
     moveContentM newurl
 
 -- | Creates a WebDAV collection, which is similar to a directory.
@@ -240,7 +244,7 @@ moveContent url newurl username password = withDS url username password $
 -- collection not existing. (Ie, collection /a/b/c/d cannot be made until
 -- collection /a/b/c exists.)
 makeCollection :: String -> B.ByteString -> B.ByteString -> IO Bool
-makeCollection url username password = withDS url username password $
+makeCollection url username password = withDS url username password Nothing $
     catchJust
         (matchStatusCodeException conflict409)
         (mkCol >> return True)

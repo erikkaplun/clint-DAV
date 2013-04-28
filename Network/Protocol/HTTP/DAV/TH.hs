@@ -24,6 +24,18 @@ import Control.Lens (makeLenses)
 import qualified Data.ByteString as B
 import Network.HTTP.Conduit (Manager, Request)
 
+data Depth = Depth0 | Depth1 | DepthInfinity
+instance Read Depth where
+    readsPrec _ x
+        | x == "0" = [(Depth0, "")]
+        | x == "1" = [(Depth1, "")]
+        | x == "infinity" = [(DepthInfinity, "")]
+        | otherwise = fail "invalid"
+instance Show Depth where
+    show Depth0 = "0"
+    show Depth1 = "1"
+    show DepthInfinity = "infinity"
+
 data DAVContext a = DAVContext {
     _allowedMethods :: [B.ByteString]
   , _baseRequest :: Request a
@@ -32,5 +44,6 @@ data DAVContext a = DAVContext {
   , _lockToken :: Maybe B.ByteString
   , _basicusername :: B.ByteString
   , _basicpassword :: B.ByteString
+  , _depth :: Maybe Depth
 }
 makeLenses ''DAVContext

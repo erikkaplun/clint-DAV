@@ -31,9 +31,9 @@ import Network (withSocketsDo)
 
 import Network.URI (normalizePathSegments)
 
-import Network.Protocol.HTTP.DAV (getProps, getPropsAndContent, putContent, putContentAndProps, deleteContent, moveContent, makeCollection)
+import Network.Protocol.HTTP.DAV (getProps, getPropsAndContent, putContent, putContentAndProps, deleteContent, moveContent, makeCollection, Depth(..))
 
-import Options.Applicative.Builder (argument, command, help, idm, info, long, metavar, progDesc, str, strOption, subparser)
+import Options.Applicative.Builder (argument, command, help, idm, info, long, metavar, option, progDesc, str, strOption, subparser)
 import Options.Applicative.Extra (execParser)
 import Options.Applicative.Types (Parser)
 
@@ -46,7 +46,7 @@ data Options = Options {
   , password2 :: String
 }
 
-data Command = Copy Options | Move Options | Delete Options | MakeCollection Options | GetProps Options | Put FilePath Options
+data Command = Copy Options | Move Options | Delete Options | MakeCollection Options | GetProps Options (Maybe Depth) | Put FilePath Options
 
 oneUUP :: Parser Options
 oneUUP = Options
@@ -134,9 +134,9 @@ doMakeCollection o = go (url o)
      parent url = reverse $ dropWhile (== '/')$ reverse $
         normalizePathSegments (url ++ "/..")
 
-doGetProps :: Options -> IO ()
-doGetProps o = do
-     doc <- getProps (url o) (BC8.pack $ username o) (BC8.pack $ password o)
+doGetProps :: Options -> Maybe Depth -> IO ()
+doGetProps o md = do
+     doc <- getProps (url o) (BC8.pack $ username o) (BC8.pack $ password o) md
      B.putStrLn (renderLBS def doc)
 
 doPut :: FilePath -> Options -> IO ()
@@ -149,7 +149,7 @@ dispatch (Copy o) = doCopy o
 dispatch (Move o) = doMove o
 dispatch (Delete o) = doDelete o
 dispatch (MakeCollection o) = doMakeCollection o
-dispatch (GetProps o) = doGetProps o
+dispatch (GetProps o md) = doGetProps o md
 dispatch (Put f o) = doPut f o
 
 main :: IO ()
@@ -165,7 +165,7 @@ cmd :: Parser Command
 cmd = subparser
   ( command "copy" (info ( Copy <$> twoUUP ) ( progDesc "Copy props and data from one location to another" ))
  <> command "delete" (info ( Delete <$> oneUUP ) ( progDesc "Delete props and data" ))
- <> command "getprops" (info ( GetProps <$> oneUUP )  ( progDesc "Fetch props and output them to stdout" ))
+ <> command "getprops" (info ( GetProps <$> oneUUP <*> (optional $ option ( long "depth" <> metavar "DEPTH" <> help "depth" )))  ( progDesc "Fetch props and output them to stdout" ))
  <> command "makecollection" (info ( MakeCollection <$> oneUUP ) ( progDesc "Make a new collection" ))
  <> command "move" (info ( Move <$> twoUoneUP ) ( progDesc "Move props and data from one location to another in the same DAV space" ))
  <> command "put" (info ( Put <$> argument str ( metavar "FILE" ) <*> oneUUP )  ( progDesc "Put file to URL" ))
