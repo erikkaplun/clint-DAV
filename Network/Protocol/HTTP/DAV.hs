@@ -32,7 +32,6 @@ module Network.Protocol.HTTP.DAV (
   , module Network.Protocol.HTTP.DAV.TH
 ) where
 
-import Paths_DAV (version)
 import Network.Protocol.HTTP.DAV.TH
 
 import Control.Applicative (liftA2)
@@ -49,7 +48,6 @@ import qualified Data.ByteString.Lazy as BL
 import qualified Data.Map as Map
 
 import Data.Maybe (catMaybes, fromMaybe)
-import Data.Version (showVersion)
 
 import Network.HTTP.Conduit (httpLbs, parseUrl, applyBasicAuth, Request(..), RequestBody(..), Response(..), newManager, closeManager, ManagerSettings(..), def, HttpException(..))
 import Network.HTTP.Types (hContentType, Method, Status, RequestHeaders, unauthorized401, conflict409)
@@ -80,7 +78,7 @@ davRequest :: MonadResourceBase m => Method -> RequestHeaders -> RequestBody (Re
 davRequest meth addlhdrs rbody = do
     ctx <- get
     let hdrs = catMaybes
-               [ Just (mk "User-Agent", (BC8.pack ("hDav " ++ showVersion version)))
+               [ Just (mk "User-Agent", (BC8.pack ("hDav-using application")))
                , fmap ((,) (mk "Depth") . BC8.pack . show) (ctx ^. depth)
                ] ++ addlhdrs
         req = (ctx ^. baseRequest) { method = meth, requestHeaders = hdrs, requestBody = rbody }
