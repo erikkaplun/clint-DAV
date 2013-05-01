@@ -1,5 +1,5 @@
 name:                DAV
-version:             0.4
+version:             0.4.1
 synopsis:            RFC 4918 WebDAV support
 description:
    This is a library for the Web Distributed Authoring and Versioning
