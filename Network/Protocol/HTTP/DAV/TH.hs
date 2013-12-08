@@ -36,9 +36,9 @@ instance Show Depth where
     show Depth1 = "1"
     show DepthInfinity = "infinity"
 
-data DAVContext a = DAVContext {
+data DAVContext = DAVContext {
     _allowedMethods :: [B.ByteString]
-  , _baseRequest :: Request a
+  , _baseRequest :: Request
   , _complianceClasses :: [B.ByteString]
   , _httpManager :: Manager
   , _lockToken :: Maybe B.ByteString

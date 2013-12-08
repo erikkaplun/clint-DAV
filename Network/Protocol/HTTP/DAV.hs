@@ -49,7 +49,8 @@ import qualified Data.Map as Map
 
 import Data.Maybe (catMaybes, fromMaybe)
 
-import Network.HTTP.Conduit (httpLbs, parseUrl, applyBasicAuth, Request(..), RequestBody(..), Response(..), newManager, closeManager, ManagerSettings(..), def, HttpException(..))
+import Network.HTTP.Client (defaultManagerSettings, RequestBody(..))
+import Network.HTTP.Conduit (httpLbs, parseUrl, applyBasicAuth, Request(..), Response(..), newManager, closeManager, ManagerSettings(..), HttpException(..))
 import Network.HTTP.Types (hContentType, Method, Status, RequestHeaders, unauthorized401, conflict409)
 
 import qualified Text.XML as XML
@@ -58,23 +59,23 @@ import Text.Hamlet.XML (xml)
 
 import Data.CaseInsensitive (mk)
 
-type DAVState m a = StateT (DAVContext m) (ResourceT m) a
+type DAVState m a = StateT DAVContext (ResourceT m) a
 
-initialDS :: String -> B.ByteString -> B.ByteString -> Maybe Depth -> ManagerSettings -> IO (DAVContext a)
+initialDS :: String -> B.ByteString -> B.ByteString -> Maybe Depth -> ManagerSettings -> IO DAVContext
 initialDS u username password md s = do
     mgr <- newManager s
     req <- parseUrl u
     return $ DAVContext [] req [] mgr Nothing username password md
 
-closeDS :: DAVContext a -> IO ()
+closeDS :: DAVContext -> IO ()
 closeDS = closeManager . _httpManager
 
 withDS :: MonadResourceBase m => String -> B.ByteString -> B.ByteString -> Maybe Depth -> DAVState m a -> m a
 withDS url username password md f = runResourceT $ do
-    (_, ds) <- allocate (initialDS url username password md def) closeDS
+    (_, ds) <- allocate (initialDS url username password md defaultManagerSettings) closeDS
     evalStateT f ds
 
-davRequest :: MonadResourceBase m => Method -> RequestHeaders -> RequestBody (ResourceT m) -> DAVState m (Response BL.ByteString)
+davRequest :: MonadResourceBase m => Method -> RequestHeaders -> RequestBody -> DAVState m (Response BL.ByteString)
 davRequest meth addlhdrs rbody = do
     ctx <- get
     let hdrs = catMaybes
@@ -94,10 +95,10 @@ matchStatusCodeException want (StatusCodeException s _ _)
     | otherwise = Nothing
 matchStatusCodeException _ _ = Nothing
 
-emptyBody :: RequestBody m
+emptyBody :: RequestBody
 emptyBody = RequestBodyLBS BL.empty
 
-xmlBody :: XML.Document -> RequestBody m
+xmlBody :: XML.Document -> RequestBody
 xmlBody = RequestBodyLBS . XML.renderLBS XML.def
 
 getOptions :: MonadResourceBase m => DAVState m ()
@@ -125,17 +126,17 @@ unlockResource = do
                        _ <- davRequest "UNLOCK" ahs emptyBody
                        modify (lockToken .~ Nothing)
 
-supportsLocking :: DAVContext a -> Bool
+supportsLocking :: DAVContext -> Bool
 supportsLocking = liftA2 (&&) ("LOCK" `elem`) ("UNLOCK" `elem`) . _allowedMethods
 
-supportsCalDAV :: DAVContext a -> Bool
+supportsCalDAV :: DAVContext -> Bool
 supportsCalDAV = ("calendar-access" `elem`) . _complianceClasses
 
 getPropsM :: MonadResourceBase m => DAVState m XML.Document
 getPropsM = do
     let ahs = [(hContentType, "application/xml; charset=\"utf-8\"")]
     propresp <- davRequest "PROPFIND" ahs (xmlBody propname)
-    return $ (XML.parseLBS_ def . responseBody) propresp
+    return $ (XML.parseLBS_ XML.def . responseBody) propresp
 
 getContentM :: MonadResourceBase m => DAVState m (Maybe B.ByteString, BL.ByteString)
 getContentM = do
@@ -204,7 +205,7 @@ caldavReportM :: MonadResourceBase m => DAVState m XML.Document
 caldavReportM = do
     let ahs = [(hContentType, "application/xml; charset=\"utf-8\"")]
     calrresp <- davRequest "REPORT" ahs (xmlBody calendarquery)
-    return $ (XML.parseLBS_ def . responseBody) calrresp
+    return $ (XML.parseLBS_ XML.def . responseBody) calrresp
 
 getProps :: String -> B.ByteString -> B.ByteString -> Maybe Depth -> IO XML.Document
 getProps url username password md = withDS url username password md getPropsM

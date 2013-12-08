@@ -29,7 +29,8 @@ library
                      , bytestring
                      , case-insensitive >= 0.4
                      , containers
-                     , http-conduit >= 1.9.0
+                     , http-client >= 0.2
+                     , http-conduit >= 2
                      , http-types >= 0.7
                      , lens >= 3.0
                      , lifted-base >= 0.1
@@ -46,7 +47,8 @@ executable hdav
                      , bytestring
                      , case-insensitive >= 0.4
                      , containers
-                     , http-conduit >= 1.9.0
+                     , http-client >= 0.2
+                     , http-conduit >= 2
                      , http-types >= 0.7
                      , lens >= 3.0
                      , lifted-base >= 0.1
