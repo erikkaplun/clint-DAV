@@ -38,7 +38,7 @@ import Control.Applicative (liftA2)
 import Control.Exception.Lifted (catchJust, finally, bracketOnError)
 import Control.Lens ((.~), (^.))
 import Control.Monad (when)
-import Control.Monad.Trans (lift)
+import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Resource (MonadResourceBase, ResourceT, runResourceT, allocate)
 import Control.Monad.Trans.State.Lazy (evalStateT, StateT, get, modify)
 
@@ -49,8 +49,8 @@ import qualified Data.Map as Map
 
 import Data.Maybe (catMaybes, fromMaybe)
 
-import Network.HTTP.Client (defaultManagerSettings, RequestBody(..))
-import Network.HTTP.Conduit (httpLbs, parseUrl, applyBasicAuth, Request(..), Response(..), newManager, closeManager, ManagerSettings(..), HttpException(..))
+import Network.HTTP.Client (RequestBody(..), httpLbs, parseUrl, applyBasicAuth, Request(..), Response(..), newManager, closeManager, ManagerSettings(..), HttpException(..))
+import Network.HTTP.Client.TLS (tlsManagerSettings)
 import Network.HTTP.Types (hContentType, Method, Status, RequestHeaders, unauthorized401, conflict409)
 
 import qualified Text.XML as XML
@@ -72,7 +72,7 @@ closeDS = closeManager . _httpManager
 
 withDS :: MonadResourceBase m => String -> B.ByteString -> B.ByteString -> Maybe Depth -> DAVState m a -> m a
 withDS url username password md f = runResourceT $ do
-    (_, ds) <- allocate (initialDS url username password md defaultManagerSettings) closeDS
+    (_, ds) <- allocate (initialDS url username password md tlsManagerSettings) closeDS
     evalStateT f ds
 
 davRequest :: MonadResourceBase m => Method -> RequestHeaders -> RequestBody -> DAVState m (Response BL.ByteString)
@@ -84,7 +84,7 @@ davRequest meth addlhdrs rbody = do
                ] ++ addlhdrs
         req = (ctx ^. baseRequest) { method = meth, requestHeaders = hdrs, requestBody = rbody }
         authreq = applyBasicAuth (ctx ^. basicusername) (ctx ^. basicpassword) req
-    resp <- lift (catchJust (matchStatusCodeException unauthorized401)
+    resp <- liftIO (catchJust (matchStatusCodeException unauthorized401)
                             (httpLbs req (ctx ^. httpManager))
                             (\_ -> httpLbs authreq (ctx ^. httpManager)))
     return resp

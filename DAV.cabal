@@ -30,7 +30,7 @@ library
                      , case-insensitive >= 0.4
                      , containers
                      , http-client >= 0.2
-                     , http-conduit >= 2
+                     , http-client-tls >= 0.2
                      , http-types >= 0.7
                      , lens >= 3.0
                      , lifted-base >= 0.1
@@ -48,7 +48,7 @@ executable hdav
                      , case-insensitive >= 0.4
                      , containers
                      , http-client >= 0.2
-                     , http-conduit >= 2
+                     , http-client-tls >= 0.2
                      , http-types >= 0.7
                      , lens >= 3.0
                      , lifted-base >= 0.1

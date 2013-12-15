@@ -22,7 +22,7 @@ module Network.Protocol.HTTP.DAV.TH where
 
 import Control.Lens (makeLenses)
 import qualified Data.ByteString as B
-import Network.HTTP.Conduit (Manager, Request)
+import Network.HTTP.Client (Manager, Request)
 
 data Depth = Depth0 | Depth1 | DepthInfinity
 instance Read Depth where
