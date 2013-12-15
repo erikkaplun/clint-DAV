@@ -1,5 +1,5 @@
 name:                DAV
-version:             0.5
+version:             0.5.1
 synopsis:            RFC 4918 WebDAV support
 description:
    This is a library for the Web Distributed Authoring and Versioning
@@ -68,4 +68,4 @@ source-repository head
 source-repository this
   type:     git
   location: git://anonscm.debian.org/users/clint/DAV.git
-  tag:      DAV/0.5
+  tag:      DAV/0.5.1
