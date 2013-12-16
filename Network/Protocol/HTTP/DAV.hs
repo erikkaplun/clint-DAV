@@ -51,12 +51,12 @@ import Network.Protocol.HTTP.DAV.TH
 
 import Control.Applicative (liftA2)
 import Control.Exception.Lifted (catchJust, finally, bracketOnError)
-import Control.Lens ((.~), (^.), (.=), (%=))
+import Control.Lens ((^.), (.=), (%=))
 import Control.Monad (liftM2, when)
 import Control.Monad.Base (MonadBase)
 import Control.Monad.IO.Class (liftIO, MonadIO)
 import Control.Monad.Trans.Control (MonadBaseControl)
-import Control.Monad.Trans.State.Lazy (evalStateT, StateT, get, modify)
+import Control.Monad.Trans.State.Lazy (evalStateT, StateT, get)
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC8
@@ -86,9 +86,7 @@ runDAVStateT u f = do
    return r
 
 setCreds :: MonadIO m => B.ByteString -> B.ByteString -> DAVStateT m ()
-setCreds u p = do
-   modify (basicusername .~ u)
-   modify (basicpassword .~ p)
+setCreds u p = basicusername .= u >> basicpassword .= p
 
 setDepth :: MonadIO m => Maybe Depth -> DAVStateT m ()
 setDepth d = depth .= d
@@ -129,8 +127,8 @@ getOptions = do
     optresp <- davRequest "OPTIONS" [] emptyBody
     let meths = (B.splitWith (==(fromIntegral . fromEnum) ',') . fromMaybe B.empty . lookup "Allow" . responseHeaders) optresp
     let cclass = (B.splitWith (==(fromIntegral . fromEnum) ',') . fromMaybe B.empty . lookup "DAV" . responseHeaders) optresp
-    modify (complianceClasses .~ cclass)
-    modify (allowedMethods .~ meths)
+    complianceClasses .= cclass
+    allowedMethods .= meths
 
 lockResource :: MonadIO m => Bool -> DAVStateT m ()
 lockResource nocreate = do
@@ -138,7 +136,7 @@ lockResource nocreate = do
     let ahs = if nocreate then (mk "If-Match", "*"):ahs' else ahs'
     lockresp <- davRequest "LOCK" ahs (xmlBody locky)
     let hdrtoken = (lookup "Lock-Token" . responseHeaders) lockresp
-    modify (lockToken .~ hdrtoken)
+    lockToken .= hdrtoken
 
 unlockResource :: MonadIO m => DAVStateT m ()
 unlockResource = do
@@ -147,7 +145,7 @@ unlockResource = do
         Nothing -> return ()
 	Just tok -> do let ahs = [(mk "Lock-Token", tok)]
                        _ <- davRequest "UNLOCK" ahs emptyBody
-                       modify (lockToken .~ Nothing)
+                       lockToken .= Nothing
 
 supportsLocking :: DAVContext -> Bool
 supportsLocking = liftA2 (&&) ("LOCK" `elem`) ("UNLOCK" `elem`) . _allowedMethods
