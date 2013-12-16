@@ -20,7 +20,8 @@ import qualified Data.ByteString.Char8 as BC8
 
 import Paths_DAV (version)
 import Control.Applicative ((<$>),(<*>), optional, pure)
-import Control.Monad (unless)
+import Control.Monad (liftM2, unless)
+import Control.Monad.IO.Class (MonadIO)
 import Data.Version (showVersion)
 import Data.Maybe (fromMaybe)
 import Data.Monoid ((<>))
@@ -31,7 +32,7 @@ import Network (withSocketsDo)
 
 import Network.URI (normalizePathSegments)
 
-import Network.Protocol.HTTP.DAV (getProps, getPropsAndContent, putContent, putContentAndProps, deleteContent, moveContent, makeCollection, Depth(..), caldavReport)
+import Network.Protocol.HTTP.DAV (DAVStateT, runDAVStateT, setCreds, setDepth, setUserAgent, getPropsM, getContentM, putContentM, putPropsM, delContentM, moveContentM, mkCol, Depth(..), caldavReportM, withLockIfPossible, withLockIfPossibleForDelete)
 
 import Options.Applicative.Builder (argument, command, help, idm, info, long, metavar, option, progDesc, str, strOption, subparser)
 import Options.Applicative.Extra (execParser)
@@ -101,8 +102,8 @@ twoUoneUP = Options
 
 doCopy :: Options -> IO ()
 doCopy o = do
-     (p, b) <- getPropsAndContent sourceurl sourceUsername sourcePassword
-     putContentAndProps targeturl targetUsername targetPassword (p, b)
+     (p, b) <- runDAV sourceurl $ setCreds sourceUsername sourcePassword >> setDepth (Just Depth0) >> withLockIfPossible True (liftM2 (,) getPropsM getContentM)
+     runDAV targeturl $ setCreds targetUsername targetPassword >> withLockIfPossible False (putContentM b >> putPropsM p)
      where
          sourceurl = url o
          targeturl = url2 o
@@ -112,10 +113,10 @@ doCopy o = do
          targetPassword = BC8.pack $ password2 o
 
 doDelete :: Options -> IO ()
-doDelete o = deleteContent (url o) (BC8.pack $ username o) (BC8.pack $ password o)
+doDelete o = runDAV (url o) $ setCreds (BC8.pack $ username o) (BC8.pack $ password o) >> withLockIfPossibleForDelete False delContentM
 
 doMove :: Options -> IO ()
-doMove o = moveContent (url o) (BC8.pack $ url2 o) (BC8.pack $ username o) (BC8.pack $ password o)
+doMove o = runDAV (url o) $ setCreds (BC8.pack $ username o) (BC8.pack $ password o) >> moveContentM (BC8.pack $ url2 o)
 
 doMakeCollection :: Options -> IO ()
 doMakeCollection o = go (url o)
@@ -123,30 +124,32 @@ doMakeCollection o = go (url o)
      u = BC8.pack . username $ o
      p = BC8.pack . password $ o
 
-     go url = do
-       ok <- makeCollection url u p
+     go url' = do
+       ok <- makeCollection url'
        unless ok $ do
-         go (parent url)
-         ok' <- makeCollection url u p
+         go (parent url')
+         ok' <- makeCollection url'
          unless ok' $
-           error $ "failed creating " ++ url
+           error $ "failed creating " ++ url'
 
-     parent url = reverse $ dropWhile (== '/')$ reverse $
-        normalizePathSegments (url ++ "/..")
+     parent url' = reverse $ dropWhile (== '/')$ reverse $
+        normalizePathSegments (url' ++ "/..")
+
+     makeCollection url' = runDAV url' $ setCreds u p >> mkCol
 
 doGetProps :: Options -> Maybe Depth -> IO ()
 doGetProps o md = do
-     doc <- getProps (url o) (BC8.pack $ username o) (BC8.pack $ password o) md
+     doc <- runDAV (url o) $ setCreds (BC8.pack $ username o) (BC8.pack $ password o) >> setDepth md >> getPropsM
      B.putStrLn (renderLBS def doc)
 
 doPut :: FilePath -> Options -> IO ()
 doPut file o = do
      bs <- B.readFile file
-     putContent (url o) (BC8.pack $ username o) (BC8.pack $ password o) (Nothing, bs)
+     runDAV (url o) $ setCreds (BC8.pack $ username o) (BC8.pack $ password o) >> putContentM (Nothing, bs)
 
 doReport :: Options -> IO ()
 doReport o = do
-     doc <- caldavReport (url o) (BC8.pack $ username o) (BC8.pack $ password o)
+     doc <- runDAV (url o) $ setCreds (BC8.pack $ username o) (BC8.pack $ password o) >> setDepth (Just Depth1) >> caldavReportM
      B.putStrLn (renderLBS def doc)
 
 dispatch :: Command -> IO ()
@@ -178,3 +181,6 @@ cmd = subparser
 
  <> command "caldav-report" (info ( CaldavReport <$> oneUUP )  ( progDesc "Get CalDAV report" ))
   )
+
+runDAV :: MonadIO m => String -> DAVStateT m a -> m a
+runDAV u f = runDAVStateT u (setUserAgent (BC8.pack $ "hDAV/" ++ showVersion version) >> f)

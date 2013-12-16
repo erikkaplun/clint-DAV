@@ -39,11 +39,12 @@ instance Show Depth where
 data DAVContext = DAVContext {
     _allowedMethods :: [B.ByteString]
   , _baseRequest :: Request
-  , _complianceClasses :: [B.ByteString]
-  , _httpManager :: Manager
-  , _lockToken :: Maybe B.ByteString
   , _basicusername :: B.ByteString
   , _basicpassword :: B.ByteString
+  , _complianceClasses :: [B.ByteString]
   , _depth :: Maybe Depth
+  , _httpManager :: Manager
+  , _lockToken :: Maybe B.ByteString
+  , _userAgent :: B.ByteString
 }
 makeLenses ''DAVContext
