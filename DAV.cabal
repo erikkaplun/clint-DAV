@@ -29,12 +29,13 @@ library
                      , bytestring
                      , case-insensitive >= 0.4
                      , containers
+                     , errors
                      , http-client >= 0.2
                      , http-client-tls >= 0.2
                      , http-types >= 0.7
                      , lens >= 3.0
                      , lifted-base >= 0.1
-                     , monad-control
+                     , monad-control >= 0.3.2
                      , mtl >= 2.1
                      , transformers >= 0.3
                      , transformers-base
@@ -48,12 +49,13 @@ executable hdav
                      , bytestring
                      , case-insensitive >= 0.4
                      , containers
+                     , errors
                      , http-client >= 0.2
                      , http-client-tls >= 0.2
                      , http-types >= 0.7
                      , lens >= 3.0
                      , lifted-base >= 0.1
-                     , monad-control
+                     , monad-control >= 0.3.2
                      , mtl >= 2.1
                      , network >= 2.3
                      , optparse-applicative >= 0.5.0

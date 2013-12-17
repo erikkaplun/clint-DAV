@@ -53,16 +53,17 @@ module Network.Protocol.HTTP.DAV (
 import Network.Protocol.HTTP.DAV.TH
 
 import Control.Applicative (liftA2, Applicative)
+import Control.Error (EitherT(..))
 import Control.Exception.Lifted (catchJust, finally, bracketOnError)
 import Control.Lens ((^.), (.=), (%=))
 import Control.Monad (liftM, liftM2, when, MonadPlus)
-import Control.Monad.Base (MonadBase(..))
-import Control.Monad.Error (ErrorT, MonadError, runErrorT)
+import Control.Monad.Base (MonadBase(..), liftBaseDefault)
+import Control.Monad.Error (Error, MonadError)
 import Control.Monad.Fix (MonadFix)
 import Control.Monad.Trans (lift, MonadTrans)
 import Control.Monad.IO.Class (liftIO, MonadIO)
 import Control.Monad.State (evalStateT, get, MonadState, StateT)
-import Control.Monad.Trans.Control (MonadBaseControl(..))
+import Control.Monad.Trans.Control (MonadBaseControl(..), MonadTransControl(..), defaultLiftBaseWith, defaultRestoreM)
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC8
@@ -81,11 +82,24 @@ import Text.Hamlet.XML (xml)
 
 import Data.CaseInsensitive (mk)
 
-newtype DAVT m a = DAVT { runDAVT :: ErrorT String (StateT DAVContext m) a }
+-- These orphans are because either has "rather '98'ish dependencies for now"
+instance (Error e, MonadBase b m) => MonadBase b (EitherT e m) where liftBase = liftBaseDefault
+
+instance Error e => MonadTransControl (EitherT e) where
+   newtype StT (EitherT e) a = StEitherT {unStEitherT :: Either e a}
+   liftWith f = EitherT $ liftM return $ f $ liftM StEitherT . runEitherT
+   restoreT = EitherT . liftM unStEitherT
+
+instance (Error e, MonadBaseControl b m) => MonadBaseControl b (EitherT e m) where
+   newtype StM (EitherT e m) a = StMEitherT { unStMEitherT :: StM m (StT (EitherT e) a) }
+   liftBaseWith = defaultLiftBaseWith StMEitherT
+   restoreM     = defaultRestoreM unStMEitherT
+
+newtype DAVT m a = DAVT { runDAVT :: EitherT String (StateT DAVContext m) a }
     deriving (Applicative, Functor, Monad, MonadBase b, MonadError String, MonadFix, MonadIO, MonadPlus, MonadState DAVContext)
 
 instance MonadBaseControl b m => MonadBaseControl b (DAVT m) where
-   newtype StM (DAVT m) a = StDAVT { unStDAVT :: StM (ErrorT String (StateT DAVContext m)) a }
+   newtype StM (DAVT m) a = StDAVT { unStDAVT :: StM (EitherT String (StateT DAVContext m)) a }
    liftBaseWith f = DAVT . liftBaseWith $ \r -> f $ liftM StDAVT . r . runDAVT
    restoreM       = DAVT . restoreM . unStDAVT
 
@@ -96,7 +110,7 @@ evalDAVT :: MonadIO m => String -> DAVT m a -> m (Either String a)
 evalDAVT u f = do
     mgr <- liftIO $ newManager tlsManagerSettings
     req <- liftIO $ parseUrl u
-    r <- (evalStateT . runErrorT . runDAVT) f $ DAVContext [] req B.empty B.empty [] Nothing mgr Nothing "hDav-using application"
+    r <- (evalStateT . runEitherT . runDAVT) f $ DAVContext [] req B.empty B.empty [] Nothing mgr Nothing "hDav-using application"
     liftIO $ closeManager mgr
     return r
 
