@@ -34,8 +34,8 @@ import Network.URI (normalizePathSegments)
 
 import Network.Protocol.HTTP.DAV (DAVT, evalDAVT, setCreds, setDepth, setUserAgent, getPropsM, getContentM, putContentM, putPropsM, delContentM, moveContentM, mkCol, Depth(..), caldavReportM, withLockIfPossible, withLockIfPossibleForDelete)
 
-import Options.Applicative.Builder (argument, command, help, idm, info, long, metavar, option, progDesc, str, strOption, subparser)
-import Options.Applicative.Extra (execParser)
+import Options.Applicative.Builder (argument, command, help, idm, info, long, metavar, option, prefs, progDesc, showHelpOnError, str, strOption, subparser)
+import Options.Applicative.Extra (customExecParser)
 import Options.Applicative.Types (Parser)
 
 data Options = Options {
@@ -168,7 +168,7 @@ main = withSocketsDo $ do
    \This is free software, and you are welcome to redistribute it\n\
    \under certain conditions.\n"
 
-    execParser (info cmd idm) >>= dispatch
+    customExecParser (prefs showHelpOnError) (info cmd idm) >>= dispatch
 
 cmd :: Parser Command
 cmd = subparser
