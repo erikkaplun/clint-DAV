@@ -32,7 +32,7 @@ import Network (withSocketsDo)
 
 import Network.URI (normalizePathSegments)
 
-import Network.Protocol.HTTP.DAV (DAVStateT, runDAVStateT, setCreds, setDepth, setUserAgent, getPropsM, getContentM, putContentM, putPropsM, delContentM, moveContentM, mkCol, Depth(..), caldavReportM, withLockIfPossible, withLockIfPossibleForDelete)
+import Network.Protocol.HTTP.DAV (DAVT, evalDAVT, setCreds, setDepth, setUserAgent, getPropsM, getContentM, putContentM, putPropsM, delContentM, moveContentM, mkCol, Depth(..), caldavReportM, withLockIfPossible, withLockIfPossibleForDelete)
 
 import Options.Applicative.Builder (argument, command, help, idm, info, long, metavar, option, progDesc, str, strOption, subparser)
 import Options.Applicative.Extra (execParser)
@@ -182,5 +182,7 @@ cmd = subparser
  <> command "caldav-report" (info ( CaldavReport <$> oneUUP )  ( progDesc "Get CalDAV report" ))
   )
 
-runDAV :: MonadIO m => String -> DAVStateT m a -> m a
-runDAV u f = runDAVStateT u (setUserAgent (BC8.pack $ "hDAV/" ++ showVersion version) >> f)
+runDAV :: MonadIO m => String -> DAVT m a -> m a
+runDAV u f = evalDAVT u (setUserAgent (BC8.pack $ "hDAV/" ++ showVersion version) >> f) >>= \x -> case x of
+    Left e -> error e
+    Right r -> return r

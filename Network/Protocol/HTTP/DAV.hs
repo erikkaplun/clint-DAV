@@ -16,11 +16,14 @@
 -- You should have received a copy of the GNU General Public License
 -- along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-{-# LANGUAGE OverloadedStrings, ConstraintKinds, FlexibleContexts, QuasiQuotes, RankNTypes #-}
+{-# LANGUAGE OverloadedStrings, ConstraintKinds, FlexibleContexts,
+             QuasiQuotes, RankNTypes, GeneralizedNewtypeDeriving,
+             FlexibleInstances, MultiParamTypeClasses, UndecidableInstances,
+             TypeFamilies #-}
 
 module Network.Protocol.HTTP.DAV (
-    DAVStateT
-  , runDAVStateT
+    DAVT(..)
+  , evalDAVT
   , setCreds
   , setDepth
   , setResponseTimeout
@@ -49,14 +52,17 @@ module Network.Protocol.HTTP.DAV (
 
 import Network.Protocol.HTTP.DAV.TH
 
-import Control.Applicative (liftA2)
+import Control.Applicative (liftA2, Applicative)
 import Control.Exception.Lifted (catchJust, finally, bracketOnError)
 import Control.Lens ((^.), (.=), (%=))
-import Control.Monad (liftM2, when)
-import Control.Monad.Base (MonadBase)
+import Control.Monad (liftM, liftM2, when, MonadPlus)
+import Control.Monad.Base (MonadBase(..))
+import Control.Monad.Error (ErrorT, MonadError, runErrorT)
+import Control.Monad.Fix (MonadFix)
+import Control.Monad.Trans (lift, MonadTrans)
 import Control.Monad.IO.Class (liftIO, MonadIO)
-import Control.Monad.Trans.Control (MonadBaseControl)
-import Control.Monad.Trans.State.Lazy (evalStateT, StateT, get)
+import Control.Monad.State (evalStateT, get, MonadState, StateT)
+import Control.Monad.Trans.Control (MonadBaseControl(..))
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC8
@@ -75,29 +81,45 @@ import Text.Hamlet.XML (xml)
 
 import Data.CaseInsensitive (mk)
 
-type DAVStateT = StateT DAVContext
+newtype DAVT m a = DAVT { runDAVT :: ErrorT String (StateT DAVContext m) a }
+    deriving (Applicative, Functor, Monad, MonadBase b, MonadError String, MonadFix, MonadIO, MonadPlus, MonadState DAVContext)
 
-runDAVStateT :: MonadIO m => String -> DAVStateT m a -> m a
-runDAVStateT u f = do
-   mgr <- liftIO $ newManager tlsManagerSettings
-   req <- liftIO $ parseUrl u
-   r <- evalStateT f $ DAVContext [] req B.empty B.empty [] Nothing mgr Nothing "hDav-using application"
-   liftIO $ closeManager mgr
-   return r
+instance MonadBaseControl b m => MonadBaseControl b (DAVT m) where
+   newtype StM (DAVT m) a = StDAVT { unStDAVT :: StM (ErrorT String (StateT DAVContext m)) a }
+   liftBaseWith f = DAVT . liftBaseWith $ \r -> f $ liftM StDAVT . r . runDAVT
+   restoreM       = DAVT . restoreM . unStDAVT
 
-setCreds :: MonadIO m => B.ByteString -> B.ByteString -> DAVStateT m ()
+instance MonadTrans DAVT where
+    lift = DAVT . lift . lift
+
+evalDAVT :: MonadIO m => String -> DAVT m a -> m (Either String a)
+evalDAVT u f = do
+    mgr <- liftIO $ newManager tlsManagerSettings
+    req <- liftIO $ parseUrl u
+    r <- (evalStateT . runErrorT . runDAVT) f $ DAVContext [] req B.empty B.empty [] Nothing mgr Nothing "hDav-using application"
+    liftIO $ closeManager mgr
+    return r
+
+choke :: IO (Either String a) -> IO a
+choke f = do
+   x <- f
+   case x of
+       Left e -> error e
+       Right r -> return r
+
+setCreds :: MonadIO m => B.ByteString -> B.ByteString -> DAVT m ()
 setCreds u p = basicusername .= u >> basicpassword .= p
 
-setDepth :: MonadIO m => Maybe Depth -> DAVStateT m ()
+setDepth :: MonadIO m => Maybe Depth -> DAVT m ()
 setDepth d = depth .= d
 
-setUserAgent :: MonadIO m => B.ByteString -> DAVStateT m ()
+setUserAgent :: MonadIO m => B.ByteString -> DAVT m ()
 setUserAgent ua = userAgent .= ua
 
-setResponseTimeout :: MonadIO m => Maybe Int -> DAVStateT m ()
+setResponseTimeout :: MonadIO m => Maybe Int -> DAVT m ()
 setResponseTimeout rt = baseRequest %= \x -> x { responseTimeout = rt }
 
-davRequest :: MonadIO m => Method -> RequestHeaders -> RequestBody -> DAVStateT m (Response BL.ByteString)
+davRequest :: MonadIO m => Method -> RequestHeaders -> RequestBody -> DAVT m (Response BL.ByteString)
 davRequest meth addlhdrs rbody = do
     ctx <- get
     let hdrs = catMaybes
@@ -122,7 +144,7 @@ emptyBody = RequestBodyLBS BL.empty
 xmlBody :: XML.Document -> RequestBody
 xmlBody = RequestBodyLBS . XML.renderLBS XML.def
 
-getOptions :: MonadIO m => DAVStateT m ()
+getOptions :: MonadIO m => DAVT m ()
 getOptions = do
     optresp <- davRequest "OPTIONS" [] emptyBody
     let meths = (B.splitWith (==(fromIntegral . fromEnum) ',') . fromMaybe B.empty . lookup "Allow" . responseHeaders) optresp
@@ -130,7 +152,7 @@ getOptions = do
     complianceClasses .= cclass
     allowedMethods .= meths
 
-lockResource :: MonadIO m => Bool -> DAVStateT m ()
+lockResource :: MonadIO m => Bool -> DAVT m ()
 lockResource nocreate = do
     let ahs' = [(hContentType, "application/xml; charset=\"utf-8\""), (mk "Depth", "0"), (mk "Timeout", "Second-300")]
     let ahs = if nocreate then (mk "If-Match", "*"):ahs' else ahs'
@@ -138,7 +160,7 @@ lockResource nocreate = do
     let hdrtoken = (lookup "Lock-Token" . responseHeaders) lockresp
     lockToken .= hdrtoken
 
-unlockResource :: MonadIO m => DAVStateT m ()
+unlockResource :: MonadIO m => DAVT m ()
 unlockResource = do
     d <- get
     case _lockToken d of
@@ -153,19 +175,19 @@ supportsLocking = liftA2 (&&) ("LOCK" `elem`) ("UNLOCK" `elem`) . _allowedMethod
 supportsCalDAV :: DAVContext -> Bool
 supportsCalDAV = ("calendar-access" `elem`) . _complianceClasses
 
-getPropsM :: MonadIO m => DAVStateT m XML.Document
+getPropsM :: MonadIO m => DAVT m XML.Document
 getPropsM = do
     let ahs = [(hContentType, "application/xml; charset=\"utf-8\"")]
     propresp <- davRequest "PROPFIND" ahs (xmlBody propname)
     return $ (XML.parseLBS_ XML.def . responseBody) propresp
 
-getContentM :: MonadIO m => DAVStateT m (Maybe B.ByteString, BL.ByteString)
+getContentM :: MonadIO m => DAVT m (Maybe B.ByteString, BL.ByteString)
 getContentM = do
     resp <- davRequest "GET" [] emptyBody
     let ct = lookup hContentType (responseHeaders resp)
     return (ct, responseBody resp)
 
-putContentM :: MonadIO m => (Maybe B.ByteString, BL.ByteString) -> DAVStateT m ()
+putContentM :: MonadIO m => (Maybe B.ByteString, BL.ByteString) -> DAVT m ()
 putContentM (ct, body) = do
     d <- get
     let ahs' = maybe [] (return . (,) (mk "If") . parenthesize) (d ^. lockToken)
@@ -173,23 +195,23 @@ putContentM (ct, body) = do
     _ <- davRequest "PUT" ahs (RequestBodyLBS body)
     return ()
 
-delContentM :: MonadIO m => DAVStateT m ()
+delContentM :: MonadIO m => DAVT m ()
 delContentM = do
     _ <- davRequest "DELETE" [] emptyBody
     return ()
 
-moveContentM :: MonadIO m => B.ByteString -> DAVStateT m ()
+moveContentM :: MonadIO m => B.ByteString -> DAVT m ()
 moveContentM newurl = do
     let ahs = [ (mk "Destination", newurl) ]
     _ <- davRequest "MOVE" ahs emptyBody
     return ()
 
-mkCol' :: MonadIO m => DAVStateT m ()
+mkCol' :: MonadIO m => DAVT m ()
 mkCol' = do
     _ <- davRequest "MKCOL" [] emptyBody
     return ()
 
-mkCol :: (MonadIO m, MonadBase IO m, MonadBaseControl IO m) => DAVStateT m Bool
+mkCol :: (MonadIO m, MonadBase IO m, MonadBaseControl IO m) => DAVT m Bool
 mkCol = catchJust
         (matchStatusCodeException conflict409)
         (mkCol' >> return True)
@@ -198,7 +220,7 @@ mkCol = catchJust
 parenthesize :: B.ByteString -> B.ByteString
 parenthesize x = B.concat ["(", x, ")"]
 
-putPropsM :: MonadIO m => XML.Document -> DAVStateT m ()
+putPropsM :: MonadIO m => XML.Document -> DAVT m ()
 putPropsM props = do
     d <- get
     let ah' = (hContentType, "application/xml; charset=\"utf-8\"")
@@ -228,23 +250,23 @@ props2patch = XML.renderLBS XML.def . patch . props . fromDocument
                    , "{DAV:}supportedlock"
                    ]
 
-caldavReportM :: MonadIO m => DAVStateT m XML.Document
+caldavReportM :: MonadIO m => DAVT m XML.Document
 caldavReportM = do
     let ahs = [(hContentType, "application/xml; charset=\"utf-8\"")]
     calrresp <- davRequest "REPORT" ahs (xmlBody calendarquery)
     return $ (XML.parseLBS_ XML.def . responseBody) calrresp
 
-getOptionsOnce :: MonadIO m => DAVStateT m ()
+getOptionsOnce :: MonadIO m => DAVT m ()
 getOptionsOnce = getOptions -- this should only happen once
 
-withLockIfPossible :: Bool -> (MonadIO m, MonadBase IO m, MonadBaseControl IO m) => DAVStateT m a -> DAVStateT m a
+withLockIfPossible :: (MonadIO m, MonadBase IO m, MonadBaseControl IO m) => Bool -> DAVT m a -> DAVT m a
 withLockIfPossible nocreate f = do
     getOptionsOnce
     o <- get
     when (supportsLocking o) (lockResource nocreate)
     f `finally` when (supportsLocking o) unlockResource
 
-withLockIfPossibleForDelete :: Bool -> (MonadIO m, MonadBase IO m, MonadBaseControl IO m) => DAVStateT m a -> DAVStateT m a
+withLockIfPossibleForDelete :: (MonadIO m, MonadBase IO m, MonadBaseControl IO m) => Bool -> DAVT m a -> DAVT m a
 withLockIfPossibleForDelete nocreate f = do
     getOptionsOnce
     o <- get
@@ -255,46 +277,46 @@ withLockIfPossibleForDelete nocreate f = do
 
 {-# DEPRECATED getProps "This function will be removed in favor of getPropsM" #-}
 getProps :: String -> B.ByteString -> B.ByteString -> Maybe Depth -> IO XML.Document
-getProps url username password md = runDAVStateT url $ do
+getProps url username password md = choke $ evalDAVT url $ do
     setCreds username password
     setDepth md
     getPropsM
 
 {-# DEPRECATED getPropsAndContent "This function will be removed in favor of getPropsM and getContentM" #-}
 getPropsAndContent :: String -> B.ByteString -> B.ByteString -> IO (XML.Document, (Maybe B.ByteString, BL.ByteString))
-getPropsAndContent url username password = runDAVStateT url $ do
+getPropsAndContent url username password = choke $ evalDAVT url $ do
     setCreds username password
     setDepth (Just Depth0)
     withLockIfPossible True $ liftM2 (,) getPropsM getContentM
 
 {-# DEPRECATED putContent "This function will be removed in favor of putContentM" #-}
 putContent :: String -> B.ByteString -> B.ByteString -> (Maybe B.ByteString, BL.ByteString) -> IO ()
-putContent url username password b = runDAVStateT url $ do
+putContent url username password b = choke $ evalDAVT url $ do
     setCreds username password
     withLockIfPossible False $ putContentM b
 
 {-# DEPRECATED putContentAndProps "This function will be removed in favor of putContentM and putPropsM" #-}
 putContentAndProps :: String -> B.ByteString -> B.ByteString -> (XML.Document, (Maybe B.ByteString, BL.ByteString)) -> IO ()
-putContentAndProps url username password (p, b) = runDAVStateT url $ do
+putContentAndProps url username password (p, b) = choke $ evalDAVT url $ do
     setCreds username password
     withLockIfPossible False $ do putContentM b
                                   putPropsM p
 
 {-# DEPRECATED deleteContent "This function will be removed in favor of delContentM" #-}
 deleteContent :: String -> B.ByteString -> B.ByteString -> IO ()
-deleteContent url username password = runDAVStateT url $ do
+deleteContent url username password = choke $ evalDAVT url $ do
     setCreds username password
     withLockIfPossibleForDelete False delContentM
 
 {-# DEPRECATED moveContent "This function will be removed in favor of moveContentM" #-}
 moveContent :: String -> B.ByteString -> B.ByteString -> B.ByteString -> IO ()
-moveContent url newurl username password = runDAVStateT url $ do
+moveContent url newurl username password = choke $ evalDAVT url $ do
     setCreds username password
     moveContentM newurl
 
 {-# DEPRECATED caldavReport "This function will be removed in favor of caldavReportM" #-}
 caldavReport :: String -> B.ByteString -> B.ByteString -> IO XML.Document
-caldavReport url username password = runDAVStateT url $ do
+caldavReport url username password = choke $ evalDAVT url $ do
    setCreds username password
    setDepth (Just Depth1)
    caldavReportM
@@ -306,7 +328,7 @@ caldavReport url username password = runDAVStateT url $ do
 -- collection /a/b/c exists.)
 {-# DEPRECATED makeCollection "This function will be removed in favor of mkCol" #-}
 makeCollection :: String -> B.ByteString -> B.ByteString -> IO Bool
-makeCollection url username password = runDAVStateT url $ do
+makeCollection url username password = choke $ evalDAVT url $ do
     setCreds username password
     mkCol
 
