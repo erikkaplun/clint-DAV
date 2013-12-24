@@ -29,6 +29,7 @@ library
                      , bytestring
                      , case-insensitive >= 0.4
                      , containers
+                     , either >= 4.1
                      , errors
                      , http-client >= 0.2
                      , http-client-tls >= 0.2
@@ -49,6 +50,7 @@ executable hdav
                      , bytestring
                      , case-insensitive >= 0.4
                      , containers
+                     , either >= 4.1
                      , errors
                      , http-client >= 0.2
                      , http-client-tls >= 0.2
