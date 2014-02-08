@@ -128,10 +128,10 @@ davRequest meth addlhdrs rbody = do
                , fmap ((,) (mk "Depth") . BC8.pack . show) (ctx ^. depth)
                ] ++ addlhdrs
         req = (ctx ^. baseRequest) { method = meth, requestHeaders = hdrs, requestBody = rbody }
-        authreq = applyBasicAuth (ctx ^. basicusername) (ctx ^. basicpassword) req
-    liftIO (catchJust (matchStatusCodeException unauthorized401)
-                      (httpLbs req (ctx ^. httpManager))
-                      (\_ -> httpLbs authreq (ctx ^. httpManager)))
+        authreq = if B.null (ctx ^. basicusername) && B.null (ctx ^. basicpassword)
+            then req
+            else applyBasicAuth (ctx ^. basicusername) (ctx ^. basicpassword) req
+    liftIO (httpLbs authreq (ctx ^. httpManager))
 
 matchStatusCodeException :: Status -> HttpException -> Maybe ()
 matchStatusCodeException want (StatusCodeException s _ _)
