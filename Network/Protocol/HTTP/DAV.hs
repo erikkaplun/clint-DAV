@@ -41,10 +41,12 @@ module Network.Protocol.HTTP.DAV (
   , delContentM
   , getPropsM
   , getContentM
+  , withContentM
   , mkCol
   , moveContentM
   , putPropsM
   , putContentM
+  , putContentM'
   , withLockIfPossible
   , withLockIfPossibleForDelete
   , module Network.Protocol.HTTP.DAV.TH
@@ -72,7 +74,7 @@ import qualified Data.Map as Map
 
 import Data.Maybe (catMaybes, fromMaybe)
 
-import Network.HTTP.Client (RequestBody(..), httpLbs, parseUrl, applyBasicAuth, Request(..), Response(..), newManager, closeManager, HttpException(..))
+import Network.HTTP.Client (RequestBody(..), httpLbs, parseUrl, applyBasicAuth, Request(..), Response(..), newManager, closeManager, HttpException(..), BodyReader, withResponse)
 import Network.HTTP.Client.TLS (tlsManagerSettings)
 import Network.HTTP.Types (hContentType, Method, Status, RequestHeaders, unauthorized401, conflict409)
 
@@ -120,8 +122,8 @@ setUserAgent ua = userAgent .= ua
 setResponseTimeout :: MonadIO m => Maybe Int -> DAVT m ()
 setResponseTimeout rt = baseRequest %= \x -> x { responseTimeout = rt }
 
-davRequest :: MonadIO m => Method -> RequestHeaders -> RequestBody -> DAVT m (Response BL.ByteString)
-davRequest meth addlhdrs rbody = do
+mkDavRequest :: MonadIO m => Method -> RequestHeaders -> RequestBody -> DAVT m Request
+mkDavRequest meth addlhdrs rbody = do
     ctx <- get
     let hdrs = catMaybes
                [ Just (mk "User-Agent", ctx ^. userAgent)
@@ -131,7 +133,14 @@ davRequest meth addlhdrs rbody = do
         authreq = if B.null (ctx ^. basicusername) && B.null (ctx ^. basicpassword)
             then req
             else applyBasicAuth (ctx ^. basicusername) (ctx ^. basicpassword) req
-    liftIO (httpLbs authreq (ctx ^. httpManager))
+    return authreq
+
+davRequest :: MonadIO m => Method -> RequestHeaders -> RequestBody -> DAVT m (Response BL.ByteString)
+davRequest meth addlhdrs rbody = go =<< mkDavRequest meth addlhdrs rbody
+  where
+    go req = do
+      ctx <- get
+      liftIO (httpLbs req (ctx ^. httpManager))
 
 matchStatusCodeException :: Status -> HttpException -> Maybe ()
 matchStatusCodeException want (StatusCodeException s _ _)
@@ -182,18 +191,33 @@ getPropsM = do
     propresp <- davRequest "PROPFIND" ahs (xmlBody propname)
     return $ (XML.parseLBS_ XML.def . responseBody) propresp
 
+-- | Note that the entire request body is buffered in memory.
+-- To stream large files use withContentM instead.
 getContentM :: MonadIO m => DAVT m (Maybe B.ByteString, BL.ByteString)
 getContentM = do
     resp <- davRequest "GET" [] emptyBody
     let ct = lookup hContentType (responseHeaders resp)
     return (ct, responseBody resp)
 
+withContentM :: MonadIO m => (Response BodyReader -> IO a) -> DAVT m a
+withContentM handleresponse = do
+    req <- mkDavRequest "GET" [] emptyBody
+    ctx <- get
+    liftIO $ withResponse req (ctx ^. httpManager) handleresponse
+
+-- | Note that the entire request body is buffered in memory; not suitable
+-- for large files.
 putContentM :: MonadIO m => (Maybe B.ByteString, BL.ByteString) -> DAVT m ()
-putContentM (ct, body) = do
+putContentM (ct, body) = putContentM' (ct, RequestBodyLBS body)
+
+-- | To send a large file, pass eg a RequestBodyStream containing the
+-- file's content.
+putContentM' :: MonadIO m => (Maybe B.ByteString, RequestBody) -> DAVT m ()
+putContentM' (ct, requestbody) = do
     d <- get
     let ahs' = maybe [] (return . (,) (mk "If") . parenthesize) (d ^. lockToken)
     let ahs = ahs' ++ maybe [] (return . (,) hContentType) ct
-    _ <- davRequest "PUT" ahs (RequestBodyLBS body)
+    _ <- davRequest "PUT" ahs requestbody
     return ()
 
 delContentM :: MonadIO m => DAVT m ()
