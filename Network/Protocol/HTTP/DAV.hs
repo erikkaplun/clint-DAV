@@ -116,7 +116,7 @@ closeDAVContext :: MonadIO m => DAVContext -> m ()
 closeDAVContext ctx = liftIO $ closeManager (ctx ^. httpManager)
 
 withDAVContext :: (MonadIO m, MonadBaseControl IO m) => DAVURL -> (DAVContext -> m a) -> m a
-withDAVContext u = bracket (mkDAVContext u) closeDAVContext 
+withDAVContext u = bracket (mkDAVContext u) closeDAVContext
 
 runDAVContext :: MonadIO m => DAVContext -> DAVT m a -> m (Either String a, DAVContext)
 runDAVContext ctx f = (runStateT . runEitherT . runDAVT . flip) f ctx
