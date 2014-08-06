@@ -24,6 +24,8 @@
 module Network.Protocol.HTTP.DAV (
     DAVT(..)
   , evalDAVT
+  , withDAVContext
+  , runDAVContext
   , setCreds
   , setDepth
   , setResponseTimeout
@@ -56,7 +58,7 @@ import Network.Protocol.HTTP.DAV.TH
 
 import Control.Applicative (liftA2, Applicative)
 import Control.Error (EitherT(..))
-import Control.Exception.Lifted (catchJust, finally, bracketOnError)
+import Control.Exception.Lifted (catchJust, finally, bracket, bracketOnError)
 import Control.Lens ((^.), (.=), (%=))
 import Control.Monad (liftM, liftM2, when, MonadPlus)
 import Control.Monad.Base (MonadBase(..))
@@ -64,7 +66,7 @@ import Control.Monad.Error (MonadError)
 import Control.Monad.Fix (MonadFix)
 import Control.Monad.Trans (lift, MonadTrans)
 import Control.Monad.IO.Class (liftIO, MonadIO)
-import Control.Monad.State (evalStateT, get, MonadState, StateT)
+import Control.Monad.State (evalStateT, runStateT, get, MonadState, StateT)
 import Control.Monad.Trans.Control (MonadBaseControl(..))
 
 import qualified Data.ByteString as B
@@ -95,13 +97,29 @@ instance MonadBaseControl b m => MonadBaseControl b (DAVT m) where
 instance MonadTrans DAVT where
     lift = DAVT . lift . lift
 
-evalDAVT :: MonadIO m => String -> DAVT m a -> m (Either String a)
+type DAVURL = String
+
+evalDAVT :: MonadIO m => DAVURL -> DAVT m a -> m (Either String a)
 evalDAVT u f = do
+    ctx <- mkDAVContext u
+    r <- (evalStateT . runEitherT . runDAVT) f ctx
+    closeDAVContext ctx
+    return r
+
+mkDAVContext :: MonadIO m => DAVURL -> m DAVContext
+mkDAVContext u = liftIO $ do
     mgr <- liftIO $ newManager tlsManagerSettings
     req <- liftIO $ parseUrl u
-    r <- (evalStateT . runEitherT . runDAVT) f $ DAVContext [] req B.empty B.empty [] Nothing mgr Nothing "hDav-using application"
-    liftIO $ closeManager mgr
-    return r
+    return $ DAVContext [] req B.empty B.empty [] Nothing mgr Nothing "hDav-using application"
+
+closeDAVContext :: MonadIO m => DAVContext -> m ()
+closeDAVContext ctx = liftIO $ closeManager (ctx ^. httpManager)
+
+withDAVContext :: (MonadIO m, MonadBaseControl IO m) => DAVURL -> (DAVContext -> m a) -> m a
+withDAVContext u = bracket (mkDAVContext u) closeDAVContext 
+
+runDAVContext :: MonadIO m => DAVContext -> DAVT m a -> m (Either String a, DAVContext)
+runDAVContext ctx f = (runStateT . runEitherT . runDAVT . flip) f ctx
 
 choke :: IO (Either String a) -> IO a
 choke f = do
