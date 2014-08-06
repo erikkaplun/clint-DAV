@@ -51,6 +51,7 @@ module Network.Protocol.HTTP.DAV (
   , putContentM'
   , withLockIfPossible
   , withLockIfPossibleForDelete
+  , davLocation
   , module Network.Protocol.HTTP.DAV.TH
 ) where
 
@@ -72,11 +73,12 @@ import Control.Monad.Trans.Control (MonadBaseControl(..))
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC8
 import qualified Data.ByteString.Lazy as BL
+import qualified Data.ByteString.UTF8 as UTF8B
 import qualified Data.Map as Map
 
 import Data.Maybe (catMaybes, fromMaybe)
 
-import Network.HTTP.Client (RequestBody(..), httpLbs, parseUrl, applyBasicAuth, Request(..), Response(..), newManager, closeManager, HttpException(..), BodyReader, withResponse)
+import Network.HTTP.Client (RequestBody(..), httpLbs, parseUrl, applyBasicAuth, Request(..), Response(..), newManager, closeManager, HttpException(..), BodyReader, withResponse, path)
 import Network.HTTP.Client.TLS (tlsManagerSettings)
 import Network.HTTP.Types (hContentType, Method, Status, RequestHeaders, unauthorized401, conflict409)
 
@@ -403,3 +405,33 @@ calendarquery = XML.Document (XML.Prologue [] Nothing []) root []
 <C:filter>
   <C:comp-filter name="VCALENDAR">
 |]
+
+-- | Normally, DAVT actions act on the url that is provided to eg, evalDAVT.
+-- Sometimes, it's useful to adjust the url that is acted on, while
+-- remaining in the same DAV session.
+--
+-- inLocation temporarily adjusts the url's path, while performing a
+-- DAVT action.
+--
+-- For example:
+--
+-- > import System.FilePath.Posix -- posix for url path manipulation
+-- >
+-- > mkColRecursive d = do
+-- >   let parent = takeDirectory d
+-- >   when (parent /= d) $
+-- >     mkColRecursive parent
+-- >   davLocation (</> d) mkCol
+--
+-- Note that operations that modify the DAVContext
+-- (such as setCreds and setCreds) can be run inside davLocation,
+-- but will not have any effect on the calling DAVContext.
+davLocation :: (MonadState DAVContext m, MonadIO m) => (String -> String) -> DAVT m a -> DAVT m a
+davLocation f a = do
+    ctx <- get
+    let r = ctx ^. baseRequest
+    let r' = r { path = adjustpath r }
+    let ctx' = ctx { _baseRequest = r' }
+    lift $ either error return =<< (evalStateT . runEitherT . runDAVT) a ctx'
+  where
+    adjustpath = UTF8B.fromString . f . UTF8B.toString . path
