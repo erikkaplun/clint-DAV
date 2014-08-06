@@ -119,7 +119,7 @@ withDAVContext :: (MonadIO m, MonadBaseControl IO m) => DAVURL -> (DAVContext ->
 withDAVContext u = bracket (mkDAVContext u) closeDAVContext
 
 runDAVContext :: MonadIO m => DAVContext -> DAVT m a -> m (Either String a, DAVContext)
-runDAVContext ctx f = (runStateT . runEitherT . runDAVT . flip) f ctx
+runDAVContext ctx f = (runStateT . runEitherT . runDAVT) f ctx
 
 choke :: IO (Either String a) -> IO a
 choke f = do
