@@ -52,17 +52,17 @@ import Network.Protocol.HTTP.DAV.TH
 
 import Control.Applicative (liftA2, Applicative)
 import Control.Error (EitherT(..))
-import Control.Exception.Lifted (catchJust, finally, bracket, bracketOnError)
 import Control.Lens ((^.), (.=), (%=), (.~))
-import Control.Monad (liftM, liftM2, when, MonadPlus)
+import Control.Monad (when, MonadPlus)
 import Control.Monad.Base (MonadBase(..))
+import Control.Monad.Catch (bracket, bracketOnError, catchJust, finally, throwM, mask, uninterruptibleMask, MonadCatch, MonadMask, MonadThrow)
+import qualified Control.Monad.Catch as MonadCatch
 import Control.Monad.Error (MonadError)
 import Control.Monad.Fix (MonadFix)
-import Control.Monad.Trans (lift, MonadTrans)
+import Control.Monad.Trans.Class (lift, MonadTrans)
 import Control.Monad.Trans.Either (left)
 import Control.Monad.IO.Class (liftIO, MonadIO)
 import Control.Monad.State (evalStateT, runStateT, get, MonadState, StateT)
-import Control.Monad.Trans.Control (MonadBaseControl(..))
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC8
@@ -89,10 +89,24 @@ instance Default DAVContext where
 newtype DAVT m a = DAVT { runDAVT :: EitherT String (StateT DAVContext m) a }
     deriving (Applicative, Functor, Monad, MonadBase b, MonadError String, MonadFix, MonadIO, MonadPlus, MonadState DAVContext)
 
-instance MonadBaseControl b m => MonadBaseControl b (DAVT m) where
-   newtype StM (DAVT m) a = StDAVT { unStDAVT :: StM (EitherT String (StateT DAVContext m)) a }
-   liftBaseWith f = DAVT . liftBaseWith $ \r -> f $ liftM StDAVT . r . runDAVT
-   restoreM       = DAVT . restoreM . unStDAVT
+-- this orphan instance is probably a bad idea
+instance MonadMask m => MonadMask (EitherT e m) where
+    mask a = EitherT $ mask $ \u -> runEitherT (a $ q u)
+        where q u = EitherT . u . runEitherT
+    uninterruptibleMask a = EitherT $ uninterruptibleMask $ \u -> runEitherT (a $ q u)
+        where q u = EitherT . u . runEitherT
+
+instance MonadCatch m => MonadCatch (DAVT m) where
+    catch (DAVT m) f = DAVT $ MonadCatch.catch m (runDAVT . f)
+
+instance MonadMask m => MonadMask (DAVT m) where
+    mask a = DAVT $ mask $ \u -> runDAVT (a $ q u)
+        where q u = DAVT . u . runDAVT
+    uninterruptibleMask a = DAVT $ uninterruptibleMask $ \u -> runDAVT (a $ q u)
+        where q u = DAVT . u . runDAVT
+
+instance MonadThrow m => MonadThrow (DAVT m) where
+    throwM = lift . throwM
 
 instance MonadTrans DAVT where
     lift = DAVT . lift . lift
@@ -115,7 +129,7 @@ mkDAVContext u = liftIO $ do
 closeDAVContext :: MonadIO m => DAVContext -> m ()
 closeDAVContext ctx = liftIO $ maybe (return ()) closeManager (ctx ^. httpManager)
 
-withDAVContext :: (MonadIO m, MonadBaseControl IO m) => DAVURL -> (DAVContext -> m a) -> m a
+withDAVContext :: (MonadIO m, MonadMask m) => DAVURL -> (DAVContext -> m a) -> m a
 withDAVContext u = bracket (mkDAVContext u) closeDAVContext
 
 runDAVContext :: MonadIO m => DAVContext -> DAVT m a -> m (Either String a, DAVContext)
@@ -247,7 +261,7 @@ mkCol' = do
     _ <- davRequest "MKCOL" [] emptyBody
     return ()
 
-mkCol :: (MonadIO m, MonadBase IO m, MonadBaseControl IO m) => DAVT m Bool
+mkCol :: (MonadIO m, MonadBase IO m, MonadCatch m) => DAVT m Bool
 mkCol = catchJust
         (matchStatusCodeException conflict409)
         (mkCol' >> return True)
@@ -295,14 +309,14 @@ caldavReportM = do
 getOptionsOnce :: MonadIO m => DAVT m ()
 getOptionsOnce = getOptions -- this should only happen once
 
-withLockIfPossible :: (MonadIO m, MonadBase IO m, MonadBaseControl IO m) => Bool -> DAVT m a -> DAVT m a
+withLockIfPossible :: (MonadIO m, MonadBase IO m, MonadCatch m, MonadMask m) => Bool -> DAVT m a -> DAVT m a
 withLockIfPossible nocreate f = do
     getOptionsOnce
     o <- get
     when (supportsLocking o) (lockResource nocreate)
     f `finally` when (supportsLocking o) unlockResource
 
-withLockIfPossibleForDelete :: (MonadIO m, MonadBase IO m, MonadBaseControl IO m) => Bool -> DAVT m a -> DAVT m a
+withLockIfPossibleForDelete :: (MonadIO m, MonadBase IO m, MonadCatch m, MonadMask m) => Bool -> DAVT m a -> DAVT m a
 withLockIfPossibleForDelete nocreate f = do
     getOptionsOnce
     o <- get
