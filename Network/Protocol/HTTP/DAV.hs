@@ -355,7 +355,7 @@ calendarquery = XML.Document (XML.Prologue [] Nothing []) root []
 -- >   let parent = takeDirectory d
 -- >   when (parent /= d) $
 -- >     mkColRecursive parent
--- >   inDavLocation (</> d) mkCol
+-- >   inDAVLocation (</> d) mkCol
 --
 -- Note that operations that modify the DAVContext
 -- (such as setCreds and setCreds) can be run inside davLocation,
