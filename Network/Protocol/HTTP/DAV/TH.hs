@@ -43,7 +43,7 @@ data DAVContext = DAVContext {
   , _basicpassword :: B.ByteString
   , _complianceClasses :: [B.ByteString]
   , _depth :: Maybe Depth
-  , _httpManager :: Manager
+  , _httpManager :: Maybe Manager
   , _lockToken :: Maybe B.ByteString
   , _userAgent :: B.ByteString
 }

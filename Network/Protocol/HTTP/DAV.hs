@@ -66,6 +66,7 @@ import Control.Monad.Base (MonadBase(..))
 import Control.Monad.Error (MonadError)
 import Control.Monad.Fix (MonadFix)
 import Control.Monad.Trans (lift, MonadTrans)
+import Control.Monad.Trans.Either (left)
 import Control.Monad.IO.Class (liftIO, MonadIO)
 import Control.Monad.State (evalStateT, runStateT, get, MonadState, StateT)
 import Control.Monad.Trans.Control (MonadBaseControl(..))
@@ -112,10 +113,10 @@ mkDAVContext :: MonadIO m => DAVURL -> m DAVContext
 mkDAVContext u = liftIO $ do
     mgr <- liftIO $ newManager tlsManagerSettings
     req <- liftIO $ parseUrl u
-    return $ DAVContext [] req B.empty B.empty [] Nothing mgr Nothing "hDav-using application"
+    return $ DAVContext [] req B.empty B.empty [] Nothing (Just mgr) Nothing "hDav-using application"
 
 closeDAVContext :: MonadIO m => DAVContext -> m ()
-closeDAVContext ctx = liftIO $ closeManager (ctx ^. httpManager)
+closeDAVContext ctx = liftIO $ maybe (return ()) closeManager (ctx ^. httpManager)
 
 withDAVContext :: (MonadIO m, MonadBaseControl IO m) => DAVURL -> (DAVContext -> m a) -> m a
 withDAVContext u = bracket (mkDAVContext u) closeDAVContext
@@ -160,7 +161,7 @@ davRequest meth addlhdrs rbody = go =<< mkDavRequest meth addlhdrs rbody
   where
     go req = do
       ctx <- get
-      liftIO (httpLbs req (ctx ^. httpManager))
+      maybe (DAVT $ left "Can't perform request without manager") (liftIO . httpLbs req) (ctx ^. httpManager)
 
 matchStatusCodeException :: Status -> HttpException -> Maybe ()
 matchStatusCodeException want (StatusCodeException s _ _)
@@ -223,7 +224,7 @@ withContentM :: MonadIO m => (Response BodyReader -> IO a) -> DAVT m a
 withContentM handleresponse = do
     req <- mkDavRequest "GET" [] emptyBody
     ctx <- get
-    liftIO $ withResponse req (ctx ^. httpManager) handleresponse
+    maybe (DAVT $ left "Can't handle response without manager") (\mgr -> liftIO $ withResponse req mgr handleresponse) (ctx ^. httpManager)
 
 -- | Note that the entire request body is buffered in memory; not suitable
 -- for large files.
