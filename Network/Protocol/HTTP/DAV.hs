@@ -350,14 +350,14 @@ calendarquery = XML.Document (XML.Prologue [] Nothing []) root []
 -- For example:
 --
 -- > import System.FilePath.Posix -- posix for url path manipulation
--- > 
+-- >
 -- > mkColRecursive d = do
 -- >   let parent = takeDirectory d
 -- >   when (parent /= d) $
 -- >     mkColRecursive parent
 -- >   inDavLocation (</> d) mkCol
 --
--- Note that operations that modify the DAVContext 
+-- Note that operations that modify the DAVContext
 -- (such as setCreds and setCreds) can be run inside davLocation,
 -- but will not have any effect on the calling DAVContext.
 inDAVLocation :: MonadIO m => (String -> String) -> DAVT m a -> DAVT m a
