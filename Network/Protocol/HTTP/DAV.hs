@@ -43,7 +43,8 @@ module Network.Protocol.HTTP.DAV (
   , putContentM'
   , withLockIfPossible
   , withLockIfPossibleForDelete
-  , davLocation
+  , inDAVLocation
+  , getDAVLocation
   , module Network.Protocol.HTTP.DAV.TH
 ) where
 
@@ -349,22 +350,28 @@ calendarquery = XML.Document (XML.Prologue [] Nothing []) root []
 -- For example:
 --
 -- > import System.FilePath.Posix -- posix for url path manipulation
--- >
+-- > 
 -- > mkColRecursive d = do
 -- >   let parent = takeDirectory d
 -- >   when (parent /= d) $
 -- >     mkColRecursive parent
--- >   davLocation (</> d) mkCol
+-- >   inDavLocation (</> d) mkCol
 --
--- Note that operations that modify the DAVContext
+-- Note that operations that modify the DAVContext 
 -- (such as setCreds and setCreds) can be run inside davLocation,
 -- but will not have any effect on the calling DAVContext.
-davLocation :: (MonadState DAVContext m, MonadIO m) => (String -> String) -> DAVT m a -> DAVT m a
-davLocation f a = do
+inDAVLocation :: MonadIO m => (String -> String) -> DAVT m a -> DAVT m a
+inDAVLocation f a = do
     ctx <- get
     let r = ctx ^. baseRequest
-        r' = r { path = adjustpath r }
-        ctx' = baseRequest .~ r' $ ctx
+    let r' = r { path = adjustpath r }
+    let ctx' = ctx { _baseRequest = r' }
     lift $ either error return =<< (evalStateT . runEitherT . runDAVT) a ctx'
   where
     adjustpath = UTF8B.fromString . f . UTF8B.toString . path
+
+-- | Gets the path of the url that DAVT actions will act on.
+getDAVLocation :: Monad m => DAVT m String
+getDAVLocation = do
+    ctx <- get
+    return (UTF8B.toString $ path $ ctx ^. baseRequest)
