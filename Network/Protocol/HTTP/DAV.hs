@@ -75,6 +75,7 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC8
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.UTF8 as UTF8B
+import Data.Default (Default, def)
 import qualified Data.Map as Map
 
 import Data.Maybe (catMaybes, fromMaybe)
@@ -88,6 +89,9 @@ import Text.XML.Cursor (($/), (&/), element, node, fromDocument, checkName)
 import Text.Hamlet.XML (xml)
 
 import Data.CaseInsensitive (mk)
+
+instance Default DAVContext where
+    def = DAVContext [] def B.empty B.empty [] Nothing def Nothing "hDav-using application"
 
 newtype DAVT m a = DAVT { runDAVT :: EitherT String (StateT DAVContext m) a }
     deriving (Applicative, Functor, Monad, MonadBase b, MonadError String, MonadFix, MonadIO, MonadPlus, MonadState DAVContext)
@@ -113,7 +117,7 @@ mkDAVContext :: MonadIO m => DAVURL -> m DAVContext
 mkDAVContext u = liftIO $ do
     mgr <- liftIO $ newManager tlsManagerSettings
     req <- liftIO $ parseUrl u
-    return $ DAVContext [] req B.empty B.empty [] Nothing (Just mgr) Nothing "hDav-using application"
+    return $ def { _baseRequest = req, _httpManager = Just mgr }
 
 closeDAVContext :: MonadIO m => DAVContext -> m ()
 closeDAVContext ctx = liftIO $ maybe (return ()) closeManager (ctx ^. httpManager)
