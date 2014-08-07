@@ -31,14 +31,6 @@ module Network.Protocol.HTTP.DAV (
   , setResponseTimeout
   , setUserAgent
   , DAVContext(..)
-  , getProps
-  , getPropsAndContent
-  , putContentAndProps
-  , putContent
-  , deleteContent
-  , moveContent
-  , makeCollection
-  , caldavReport
   , caldavReportM
   , delContentM
   , getPropsM
@@ -324,63 +316,6 @@ withLockIfPossibleForDelete nocreate f = do
     -- a successful delete destroys locks, so only unlock on error
     let unlock = when (supportsLocking o) unlockResource
     bracketOnError lock (const unlock) (const f)
-
-{-# DEPRECATED getProps "This function will be removed in favor of getPropsM" #-}
-getProps :: String -> B.ByteString -> B.ByteString -> Maybe Depth -> IO XML.Document
-getProps url username password md = choke $ evalDAVT url $ do
-    setCreds username password
-    setDepth md
-    getPropsM
-
-{-# DEPRECATED getPropsAndContent "This function will be removed in favor of getPropsM and getContentM" #-}
-getPropsAndContent :: String -> B.ByteString -> B.ByteString -> IO (XML.Document, (Maybe B.ByteString, BL.ByteString))
-getPropsAndContent url username password = choke $ evalDAVT url $ do
-    setCreds username password
-    setDepth (Just Depth0)
-    withLockIfPossible True $ liftM2 (,) getPropsM getContentM
-
-{-# DEPRECATED putContent "This function will be removed in favor of putContentM" #-}
-putContent :: String -> B.ByteString -> B.ByteString -> (Maybe B.ByteString, BL.ByteString) -> IO ()
-putContent url username password b = choke $ evalDAVT url $ do
-    setCreds username password
-    withLockIfPossible False $ putContentM b
-
-{-# DEPRECATED putContentAndProps "This function will be removed in favor of putContentM and putPropsM" #-}
-putContentAndProps :: String -> B.ByteString -> B.ByteString -> (XML.Document, (Maybe B.ByteString, BL.ByteString)) -> IO ()
-putContentAndProps url username password (p, b) = choke $ evalDAVT url $ do
-    setCreds username password
-    withLockIfPossible False $ do putContentM b
-                                  putPropsM p
-
-{-# DEPRECATED deleteContent "This function will be removed in favor of delContentM" #-}
-deleteContent :: String -> B.ByteString -> B.ByteString -> IO ()
-deleteContent url username password = choke $ evalDAVT url $ do
-    setCreds username password
-    withLockIfPossibleForDelete False delContentM
-
-{-# DEPRECATED moveContent "This function will be removed in favor of moveContentM" #-}
-moveContent :: String -> B.ByteString -> B.ByteString -> B.ByteString -> IO ()
-moveContent url newurl username password = choke $ evalDAVT url $ do
-    setCreds username password
-    moveContentM newurl
-
-{-# DEPRECATED caldavReport "This function will be removed in favor of caldavReportM" #-}
-caldavReport :: String -> B.ByteString -> B.ByteString -> IO XML.Document
-caldavReport url username password = choke $ evalDAVT url $ do
-   setCreds username password
-   setDepth (Just Depth1)
-   caldavReportM
-
--- | Creates a WebDAV collection, which is similar to a directory.
---
--- Returns False if the collection could not be made due to an intermediate
--- collection not existing. (Ie, collection /a/b/c/d cannot be made until
--- collection /a/b/c exists.)
-{-# DEPRECATED makeCollection "This function will be removed in favor of mkCol" #-}
-makeCollection :: String -> B.ByteString -> B.ByteString -> IO Bool
-makeCollection url username password = choke $ evalDAVT url $ do
-    setCreds username password
-    mkCol
 
 propname :: XML.Document
 propname = XML.Document (XML.Prologue [] Nothing []) root []
