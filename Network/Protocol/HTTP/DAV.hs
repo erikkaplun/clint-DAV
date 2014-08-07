@@ -364,8 +364,8 @@ inDAVLocation :: MonadIO m => (String -> String) -> DAVT m a -> DAVT m a
 inDAVLocation f a = do
     ctx <- get
     let r = ctx ^. baseRequest
-    let r' = r { path = adjustpath r }
-    let ctx' = ctx { _baseRequest = r' }
+        r' = r { path = adjustpath r }
+        ctx' = baseRequest .~ r' $ ctx
     lift $ either error return =<< (evalStateT . runEitherT . runDAVT) a ctx'
   where
     adjustpath = UTF8B.fromString . f . UTF8B.toString . path
