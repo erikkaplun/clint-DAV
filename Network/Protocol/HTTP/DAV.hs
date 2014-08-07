@@ -52,7 +52,7 @@ import Network.Protocol.HTTP.DAV.TH
 import Control.Applicative (liftA2, Applicative)
 import Control.Error (EitherT(..))
 import Control.Exception.Lifted (catchJust, finally, bracket, bracketOnError)
-import Control.Lens ((^.), (.=), (%=))
+import Control.Lens ((^.), (.=), (%=), (.~))
 import Control.Monad (liftM, liftM2, when, MonadPlus)
 import Control.Monad.Base (MonadBase(..))
 import Control.Monad.Error (MonadError)
@@ -119,13 +119,6 @@ withDAVContext u = bracket (mkDAVContext u) closeDAVContext
 
 runDAVContext :: MonadIO m => DAVContext -> DAVT m a -> m (Either String a, DAVContext)
 runDAVContext ctx f = (runStateT . runEitherT . runDAVT) f ctx
-
-choke :: IO (Either String a) -> IO a
-choke f = do
-   x <- f
-   case x of
-       Left e -> error e
-       Right r -> return r
 
 setCreds :: MonadIO m => B.ByteString -> B.ByteString -> DAVT m ()
 setCreds u p = basicusername .= u >> basicpassword .= p
@@ -370,8 +363,8 @@ davLocation :: (MonadState DAVContext m, MonadIO m) => (String -> String) -> DAV
 davLocation f a = do
     ctx <- get
     let r = ctx ^. baseRequest
-    let r' = r { path = adjustpath r }
-    let ctx' = ctx { _baseRequest = r' }
+        r' = r { path = adjustpath r }
+        ctx' = baseRequest .~ r' $ ctx
     lift $ either error return =<< (evalStateT . runEitherT . runDAVT) a ctx'
   where
     adjustpath = UTF8B.fromString . f . UTF8B.toString . path
