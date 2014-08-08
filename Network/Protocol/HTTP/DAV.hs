@@ -45,6 +45,8 @@ module Network.Protocol.HTTP.DAV (
   , withLockIfPossibleForDelete
   , inDAVLocation
   , getDAVLocation
+  , mkDAVContext
+  , closeDAVContext
   , module Network.Protocol.HTTP.DAV.TH
 ) where
 
