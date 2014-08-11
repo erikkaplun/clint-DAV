@@ -30,7 +30,7 @@ library
                      , case-insensitive >= 0.4
                      , containers
                      , data-default
-                     , either >= 4.1
+                     , either >= 4.3
                      , errors
                      , exceptions
                      , http-client >= 0.2
@@ -52,7 +52,7 @@ executable hdav
                      , case-insensitive >= 0.4
                      , containers
                      , data-default
-                     , either >= 4.1
+                     , either >= 4.3
                      , errors
                      , exceptions
                      , http-client >= 0.2
