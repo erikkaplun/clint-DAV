@@ -61,7 +61,7 @@ executable hdav
                      , lens >= 3.0
                      , mtl >= 2.1
                      , network >= 2.3
-                     , optparse-applicative >= 0.5.0
+                     , optparse-applicative >= 0.10.0
                      , transformers >= 0.3
                      , transformers-base
                      , utf8-string

@@ -34,7 +34,7 @@ import Network.URI (normalizePathSegments)
 
 import Network.Protocol.HTTP.DAV (DAVT, evalDAVT, setCreds, setDepth, setUserAgent, getPropsM, getContentM, putContentM, putPropsM, delContentM, moveContentM, mkCol, Depth(..), caldavReportM, withLockIfPossible, withLockIfPossibleForDelete)
 
-import Options.Applicative.Builder (argument, command, help, idm, info, long, metavar, option, prefs, progDesc, showHelpOnError, str, strOption, subparser)
+import Options.Applicative.Builder (argument, command, help, idm, info, long, metavar, option, prefs, progDesc, showHelpOnError, str, strOption, subparser, auto)
 import Options.Applicative.Extra (customExecParser)
 import Options.Applicative.Types (Parser)
 
@@ -174,13 +174,15 @@ cmd :: Parser Command
 cmd = subparser
   ( command "copy" (info ( Copy <$> twoUUP ) ( progDesc "Copy props and data from one location to another" ))
  <> command "delete" (info ( Delete <$> oneUUP ) ( progDesc "Delete props and data" ))
- <> command "getprops" (info ( GetProps <$> oneUUP <*> (optional $ option ( long "depth" <> metavar "DEPTH" <> help "depth" )))  ( progDesc "Fetch props and output them to stdout" ))
+ <> command "getprops" (info ( GetProps <$> oneUUP <*> (optional depth))  ( progDesc "Fetch props and output them to stdout" ))
  <> command "makecollection" (info ( MakeCollection <$> oneUUP ) ( progDesc "Make a new collection" ))
  <> command "move" (info ( Move <$> twoUoneUP ) ( progDesc "Move props and data from one location to another in the same DAV space" ))
  <> command "put" (info ( Put <$> argument str ( metavar "FILE" ) <*> oneUUP )  ( progDesc "Put file to URL" ))
 
  <> command "caldav-report" (info ( CaldavReport <$> oneUUP )  ( progDesc "Get CalDAV report" ))
   )
+ where
+   depth = option auto ( long "depth" <> metavar "DEPTH" <> help "depth" ) :: Parser Depth
 
 runDAV :: MonadIO m => String -> DAVT m a -> m a
 runDAV u f = evalDAVT u (setUserAgent (BC8.pack $ "hDAV/" ++ showVersion version) >> f) >>= \x -> case x of
