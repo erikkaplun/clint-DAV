@@ -35,7 +35,7 @@ library
                      , containers
                      , data-default
                      , either >= 4.3
-                     , errors
+                     , errors < 2.0
                      , exceptions
                      , http-client >= 0.2
                      , http-client-tls >= 0.2
@@ -57,7 +57,7 @@ executable hdav
                      , containers
                      , data-default
                      , either >= 4.3
-                     , errors
+                     , errors < 2.0
                      , exceptions
                      , http-client >= 0.2
                      , http-client-tls >= 0.2
