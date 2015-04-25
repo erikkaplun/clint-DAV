@@ -1,3 +1,5 @@
+{-# LANGUAGE FlexibleContexts #-}
+
 -- hdav.hs: WebDAV client
 -- Copyright © 2012-2014  Clint Adams
 --

@@ -52,7 +52,7 @@ module Network.Protocol.HTTP.DAV (
 
 import Network.Protocol.HTTP.DAV.TH
 
-import Control.Applicative (liftA2, Applicative)
+import Control.Applicative (liftA2, Alternative, Applicative)
 import Control.Error (EitherT(..))
 import Control.Lens ((^.), (.=), (%=), (.~))
 import Control.Monad (when, MonadPlus)
@@ -89,7 +89,7 @@ instance Default DAVContext where
     def = DAVContext [] def B.empty B.empty [] Nothing def Nothing "hDav-using application"
 
 newtype DAVT m a = DAVT { runDAVT :: EitherT String (StateT DAVContext m) a }
-    deriving (Applicative, Functor, Monad, MonadBase b, MonadError String, MonadFix, MonadIO, MonadPlus, MonadState DAVContext)
+    deriving (Alternative, Applicative, Functor, Monad, MonadBase b, MonadError String, MonadFix, MonadIO, MonadPlus, MonadState DAVContext)
 
 -- this orphan instance is probably a bad idea
 instance MonadMask m => MonadMask (EitherT e m) where
