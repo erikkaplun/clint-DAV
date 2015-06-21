@@ -53,7 +53,7 @@ module Network.Protocol.HTTP.DAV (
 import Network.Protocol.HTTP.DAV.TH
 
 import Control.Applicative (liftA2, Alternative, Applicative)
-import Control.Error (EitherT(..))
+import Control.Monad.Trans.Either (EitherT(..))
 import Control.Lens ((^.), (.=), (%=), (.~))
 import Control.Monad (when, MonadPlus)
 import Control.Monad.Base (MonadBase(..))
