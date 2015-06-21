@@ -1,5 +1,5 @@
 -- DAV.hs: WebDAV client library
--- Copyright © 2012-2014  Clint Adams
+-- Copyright © 2012-2015  Clint Adams
 --
 -- vim: softtabstop=4:shiftwidth=4:expandtab
 --
