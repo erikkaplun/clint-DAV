@@ -15,7 +15,7 @@ license:             GPL-3
 license-file:        LICENSE
 author:              Clint Adams
 maintainer:          clint@debian.org
-copyright:           Copyright (C) 2012-2014  Clint Adams
+copyright:           Copyright (C) 2012-2015  Clint Adams
 category:            Web
 build-type:          Simple
 cabal-version:       >=1.8
@@ -45,7 +45,7 @@ library
                      , transformers >= 0.3
                      , transformers-base
                      , utf8-string
-                     , xml-conduit >= 1.0          && < 1.3
+                     , xml-conduit >= 1.0
                      , xml-hamlet >= 0.4           && < 0.5
 executable hdav
   main-is:           hdav.hs
@@ -68,7 +68,7 @@ executable hdav
                      , transformers >= 0.3
                      , transformers-base
                      , utf8-string
-                     , xml-conduit >= 1.0          && < 1.3
+                     , xml-conduit >= 1.0
                      , xml-hamlet >= 0.4           && < 0.5
   if flag(network-uri)
     build-depends: network-uri >= 2.6, network >= 2.6
