@@ -202,7 +202,7 @@ unlockResource = do
     d <- get
     case _lockToken d of
         Nothing -> return ()
-	Just tok -> do let ahs = [(mk "Lock-Token", tok)]
+        Just tok -> do let ahs = [(mk "Lock-Token", tok)]
                        _ <- davRequest "UNLOCK" ahs emptyBody
                        lockToken .= Nothing
 
@@ -288,8 +288,8 @@ props2patch = XML.renderLBS XML.def . patch . props . fromDocument
        root [] = propertyupdate []
        root prop = propertyupdate
            [ XML.NodeElement $ XML.Element "D:set" Map.empty
-	     [ XML.NodeElement $ XML.Element "D:prop" Map.empty prop ]
-	   ]
+             [ XML.NodeElement $ XML.Element "D:prop" Map.empty prop ]
+           ]
        propertyupdate = XML.Element "D:propertyupdate" (Map.fromList [("xmlns:D", "DAV:")])
        blacklist = [ "{DAV:}creationdate"
                    , "{DAV:}displayname"
