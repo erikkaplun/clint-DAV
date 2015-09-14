@@ -41,6 +41,7 @@ library
                      , http-types >= 0.7
                      , lens >= 3.0
                      , mtl >= 2.1
+                     , mtl-compat
                      , transformers >= 0.3
                      , transformers-base
                      , utf8-string
@@ -62,6 +63,7 @@ executable hdav
                      , http-types >= 0.7
                      , lens >= 3.0
                      , mtl >= 2.1
+                     , mtl-compat
                      , optparse-applicative >= 0.10.0
                      , transformers >= 0.3
                      , transformers-base

@@ -59,7 +59,7 @@ import Control.Monad (when, MonadPlus)
 import Control.Monad.Base (MonadBase(..))
 import Control.Monad.Catch (bracket, bracketOnError, catchJust, finally, throwM, mask, uninterruptibleMask, MonadCatch, MonadMask, MonadThrow)
 import qualified Control.Monad.Catch as MonadCatch
-import Control.Monad.Error (MonadError)
+import Control.Monad.Except (MonadError)
 import Control.Monad.Fix (MonadFix)
 import Control.Monad.Trans.Class (lift, MonadTrans)
 import Control.Monad.Trans.Either (left)
