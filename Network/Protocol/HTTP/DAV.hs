@@ -209,9 +209,6 @@ unlockResource = do
 supportsLocking :: DAVContext -> Bool
 supportsLocking = liftA2 (&&) ("LOCK" `elem`) ("UNLOCK" `elem`) . _allowedMethods
 
-supportsCalDAV :: DAVContext -> Bool
-supportsCalDAV = ("calendar-access" `elem`) . _complianceClasses
-
 getPropsM :: MonadIO m => DAVT m XML.Document
 getPropsM = do
     let ahs = [(hContentType, "application/xml; charset=\"utf-8\"")]
