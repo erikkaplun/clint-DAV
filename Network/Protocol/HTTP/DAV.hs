@@ -53,7 +53,7 @@ module Network.Protocol.HTTP.DAV (
 import Network.Protocol.HTTP.DAV.TH
 
 import Control.Applicative (liftA2, Alternative, Applicative)
-import Control.Monad.Trans.Either (EitherT(..))
+import Control.Monad.Trans.Except (ExceptT(..), throwE)
 import Control.Lens ((^.), (.=), (%=), (.~))
 import Control.Monad (when, MonadPlus)
 import Control.Monad.Base (MonadBase(..))
@@ -62,7 +62,6 @@ import qualified Control.Monad.Catch as MonadCatch
 import Control.Monad.Except (MonadError)
 import Control.Monad.Fix (MonadFix)
 import Control.Monad.Trans.Class (lift, MonadTrans)
-import Control.Monad.Trans.Either (left)
 import Control.Monad.IO.Class (liftIO, MonadIO)
 import Control.Monad.State (evalStateT, runStateT, get, MonadState, StateT)
 
@@ -88,15 +87,15 @@ import Data.CaseInsensitive (mk)
 instance Default DAVContext where
     def = DAVContext [] def B.empty B.empty [] Nothing def Nothing "hDav-using application"
 
-newtype DAVT m a = DAVT { runDAVT :: EitherT String (StateT DAVContext m) a }
+newtype DAVT m a = DAVT { runDAVT :: ExceptT String (StateT DAVContext m) a }
     deriving (Alternative, Applicative, Functor, Monad, MonadBase b, MonadError String, MonadFix, MonadIO, MonadPlus, MonadState DAVContext)
 
 -- this orphan instance is probably a bad idea
-instance MonadMask m => MonadMask (EitherT e m) where
-    mask a = EitherT $ mask $ \u -> runEitherT (a $ q u)
-        where q u = EitherT . u . runEitherT
-    uninterruptibleMask a = EitherT $ uninterruptibleMask $ \u -> runEitherT (a $ q u)
-        where q u = EitherT . u . runEitherT
+instance MonadMask m => MonadMask (ExceptT e m) where
+    mask a = ExceptT $ mask $ \u -> runExceptT (a $ q u)
+        where q u = ExceptT . u . runExceptT
+    uninterruptibleMask a = ExceptT $ uninterruptibleMask $ \u -> runExceptT (a $ q u)
+        where q u = ExceptT . u . runExceptT
 
 instance MonadCatch m => MonadCatch (DAVT m) where
     catch (DAVT m) f = DAVT $ MonadCatch.catch m (runDAVT . f)
@@ -118,7 +117,7 @@ type DAVURL = String
 evalDAVT :: MonadIO m => DAVURL -> DAVT m a -> m (Either String a)
 evalDAVT u f = do
     ctx <- mkDAVContext u
-    r <- (evalStateT . runEitherT . runDAVT) f ctx
+    r <- (evalStateT . runExceptT . runDAVT) f ctx
     closeDAVContext ctx
     return r
 
@@ -135,7 +134,7 @@ withDAVContext :: (MonadIO m, MonadMask m) => DAVURL -> (DAVContext -> m a) -> m
 withDAVContext u = bracket (mkDAVContext u) closeDAVContext
 
 runDAVContext :: MonadIO m => DAVContext -> DAVT m a -> m (Either String a, DAVContext)
-runDAVContext ctx f = (runStateT . runEitherT . runDAVT) f ctx
+runDAVContext ctx f = (runStateT . runExceptT . runDAVT) f ctx
 
 setCreds :: MonadIO m => B.ByteString -> B.ByteString -> DAVT m ()
 setCreds u p = basicusername .= u >> basicpassword .= p
@@ -167,7 +166,7 @@ davRequest meth addlhdrs rbody = go =<< mkDavRequest meth addlhdrs rbody
   where
     go req = do
       ctx <- get
-      maybe (DAVT $ left "Can't perform request without manager") (liftIO . httpLbs req) (ctx ^. httpManager)
+      maybe (DAVT $ throwE "Can't perform request without manager") (liftIO . httpLbs req) (ctx ^. httpManager)
 
 matchStatusCodeException :: Status -> HttpException -> Maybe ()
 matchStatusCodeException want (StatusCodeException s _ _)
@@ -227,7 +226,7 @@ withContentM :: MonadIO m => (Response BodyReader -> IO a) -> DAVT m a
 withContentM handleresponse = do
     req <- mkDavRequest "GET" [] emptyBody
     ctx <- get
-    maybe (DAVT $ left "Can't handle response without manager") (\mgr -> liftIO $ withResponse req mgr handleresponse) (ctx ^. httpManager)
+    maybe (DAVT $ throwE "Can't handle response without manager") (\mgr -> liftIO $ withResponse req mgr handleresponse) (ctx ^. httpManager)
 
 -- | Note that the entire request body is buffered in memory; not suitable
 -- for large files.
@@ -379,7 +378,7 @@ inDAVLocation f a = do
     let r = ctx ^. baseRequest
         r' = r { path = adjustpath r }
         ctx' = baseRequest .~ r' $ ctx
-    lift $ either error return =<< (evalStateT . runEitherT . runDAVT) a ctx'
+    lift $ either error return =<< (evalStateT . runExceptT . runDAVT) a ctx'
   where
     adjustpath = UTF8B.fromString . f . UTF8B.toString . path
 
