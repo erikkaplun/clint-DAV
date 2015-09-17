@@ -118,7 +118,7 @@ mkDAVContext u = liftIO $ do
 closeDAVContext :: MonadIO m => DAVContext -> m ()
 closeDAVContext _ = return ()
 
-withDAVContext :: (MonadIO m) => DAVURL -> (DAVContext -> m a) -> m a
+withDAVContext :: MonadIO m => DAVURL -> (DAVContext -> m a) -> m a
 withDAVContext u f = mkDAVContext u >>= f
 
 runDAVContext :: MonadIO m => DAVContext -> DAVT m a -> m (Either String a, DAVContext)
