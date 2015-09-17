@@ -74,7 +74,7 @@ import qualified Data.Map as Map
 
 import Data.Maybe (catMaybes, fromMaybe)
 
-import Network.HTTP.Client (RequestBody(..), httpLbs, parseUrl, applyBasicAuth, Request(..), Response(..), newManager, closeManager, HttpException(..), BodyReader, withResponse, path)
+import Network.HTTP.Client (RequestBody(..), httpLbs, parseUrl, applyBasicAuth, Request(..), Response(..), newManager, HttpException(..), BodyReader, withResponse, path)
 import Network.HTTP.Client.TLS (tlsManagerSettings)
 import Network.HTTP.Types (hContentType, Method, Status, RequestHeaders, unauthorized401, conflict409)
 
@@ -127,8 +127,9 @@ mkDAVContext u = liftIO $ do
     req <- liftIO $ parseUrl u
     return $ def { _baseRequest = req, _httpManager = Just mgr }
 
+{-# DEPRECATED closeDAVContext "deprecated because http-client deprecated closeManager" #-}
 closeDAVContext :: MonadIO m => DAVContext -> m ()
-closeDAVContext ctx = liftIO $ maybe (return ()) closeManager (ctx ^. httpManager)
+closeDAVContext _ = return ()
 
 withDAVContext :: (MonadIO m, MonadMask m) => DAVURL -> (DAVContext -> m a) -> m a
 withDAVContext u = bracket (mkDAVContext u) closeDAVContext
