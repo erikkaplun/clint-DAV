@@ -57,9 +57,9 @@ import Control.Monad.Trans.Except (ExceptT(..), throwE)
 import Control.Lens ((^.), (.=), (%=), (.~))
 import Control.Monad (when, MonadPlus)
 import Control.Monad.Base (MonadBase(..))
-import Control.Monad.Catch (bracket, bracketOnError, catchJust, finally, throwM, mask, uninterruptibleMask, MonadCatch, MonadMask, MonadThrow)
+import Control.Monad.Catch (bracket, bracketOnError, catchJust, finally, throwM, mask, uninterruptibleMask, MonadCatch, MonadThrow)
 import qualified Control.Monad.Catch as MonadCatch
-import Control.Monad.Except (MonadError)
+import Control.Monad.Except (MonadError, catchError, throwError)
 import Control.Monad.Fix (MonadFix)
 import Control.Monad.Trans.Class (lift, MonadTrans)
 import Control.Monad.IO.Class (liftIO, MonadIO)
@@ -90,21 +90,8 @@ instance Default DAVContext where
 newtype DAVT m a = DAVT { runDAVT :: ExceptT String (StateT DAVContext m) a }
     deriving (Alternative, Applicative, Functor, Monad, MonadBase b, MonadError String, MonadFix, MonadIO, MonadPlus, MonadState DAVContext)
 
--- this orphan instance is probably a bad idea
-instance MonadMask m => MonadMask (ExceptT e m) where
-    mask a = ExceptT $ mask $ \u -> runExceptT (a $ q u)
-        where q u = ExceptT . u . runExceptT
-    uninterruptibleMask a = ExceptT $ uninterruptibleMask $ \u -> runExceptT (a $ q u)
-        where q u = ExceptT . u . runExceptT
-
 instance MonadCatch m => MonadCatch (DAVT m) where
     catch (DAVT m) f = DAVT $ MonadCatch.catch m (runDAVT . f)
-
-instance MonadMask m => MonadMask (DAVT m) where
-    mask a = DAVT $ mask $ \u -> runDAVT (a $ q u)
-        where q u = DAVT . u . runDAVT
-    uninterruptibleMask a = DAVT $ uninterruptibleMask $ \u -> runDAVT (a $ q u)
-        where q u = DAVT . u . runDAVT
 
 instance MonadThrow m => MonadThrow (DAVT m) where
     throwM = lift . throwM
@@ -131,8 +118,8 @@ mkDAVContext u = liftIO $ do
 closeDAVContext :: MonadIO m => DAVContext -> m ()
 closeDAVContext _ = return ()
 
-withDAVContext :: (MonadIO m, MonadMask m) => DAVURL -> (DAVContext -> m a) -> m a
-withDAVContext u = bracket (mkDAVContext u) closeDAVContext
+withDAVContext :: (MonadIO m) => DAVURL -> (DAVContext -> m a) -> m a
+withDAVContext u f = mkDAVContext u >>= f
 
 runDAVContext :: MonadIO m => DAVContext -> DAVT m a -> m (Either String a, DAVContext)
 runDAVContext ctx f = (runStateT . runExceptT . runDAVT) f ctx
@@ -308,21 +295,22 @@ caldavReportM = do
 getOptionsOnce :: MonadIO m => DAVT m ()
 getOptionsOnce = getOptions -- this should only happen once
 
-withLockIfPossible :: (MonadIO m, MonadBase IO m, MonadCatch m, MonadMask m) => Bool -> DAVT m a -> DAVT m a
+withLockIfPossible :: (MonadIO m, MonadBase IO m) => Bool -> DAVT m a -> DAVT m a
 withLockIfPossible nocreate f = do
     getOptionsOnce
     o <- get
     when (supportsLocking o) (lockResource nocreate)
-    f `finally` when (supportsLocking o) unlockResource
+    res <- f
+    when (supportsLocking o) unlockResource
+    return res
 
-withLockIfPossibleForDelete :: (MonadIO m, MonadBase IO m, MonadCatch m, MonadMask m) => Bool -> DAVT m a -> DAVT m a
+withLockIfPossibleForDelete :: (MonadIO m, MonadBase IO m) => Bool -> DAVT m a -> DAVT m a
 withLockIfPossibleForDelete nocreate f = do
     getOptionsOnce
     o <- get
-    let lock = when (supportsLocking o) (lockResource nocreate)
+    when (supportsLocking o) (lockResource nocreate)
     -- a successful delete destroys locks, so only unlock on error
-    let unlock = when (supportsLocking o) unlockResource
-    bracketOnError lock (const unlock) (const f)
+    catchError f (\e -> when (supportsLocking o) unlockResource >> throwError e)
 
 propname :: XML.Document
 propname = XML.Document (XML.Prologue [] Nothing []) root []
