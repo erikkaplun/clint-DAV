@@ -53,7 +53,7 @@ module Network.Protocol.HTTP.DAV (
 import Network.Protocol.HTTP.DAV.TH
 
 import Control.Applicative (liftA2, Alternative, Applicative)
-import Control.Monad.Trans.Except (ExceptT(..), throwE)
+import Control.Monad.Trans.Except (ExceptT(..), throwE, runExceptT)
 import Control.Lens ((^.), (.=), (%=), (.~))
 import Control.Monad (when, MonadPlus)
 import Control.Monad.Base (MonadBase(..))
