@@ -57,7 +57,7 @@ import Control.Monad.Trans.Except (ExceptT(..), throwE, runExceptT)
 import Control.Lens ((^.), (.=), (%=), (.~))
 import Control.Monad (when, MonadPlus)
 import Control.Monad.Base (MonadBase(..))
-import Control.Monad.Catch (bracket, bracketOnError, catchJust, finally, throwM, mask, uninterruptibleMask, MonadCatch, MonadThrow)
+import Control.Monad.Catch (catchJust, throwM, MonadCatch, MonadThrow)
 import qualified Control.Monad.Catch as MonadCatch
 import Control.Monad.Except (MonadError, catchError, throwError)
 import Control.Monad.Fix (MonadFix)
@@ -76,7 +76,7 @@ import Data.Maybe (catMaybes, fromMaybe)
 
 import Network.HTTP.Client (RequestBody(..), httpLbs, parseUrl, applyBasicAuth, Request(..), Response(..), newManager, HttpException(..), BodyReader, withResponse, path)
 import Network.HTTP.Client.TLS (tlsManagerSettings)
-import Network.HTTP.Types (hContentType, Method, Status, RequestHeaders, unauthorized401, conflict409)
+import Network.HTTP.Types (hContentType, Method, Status, RequestHeaders, conflict409)
 
 import qualified Text.XML as XML
 import Text.XML.Cursor (($/), (&/), element, node, fromDocument, checkName)
